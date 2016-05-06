@@ -5,7 +5,7 @@ INCPATH=
 INCLIB=
 
 all:
-	$(CC) $(INCPATH) $(CFLAGS) $(PROC) imagick.c daemon.c process.c channel.c $(INCLIB)
+	$(CC) $(INCPATH) $(CFLAGS) $(PROC) imagick.c daemon.c process.c channel.c log.c $(INCLIB)
 clean:
 	rm -rf $(PROC)
 	rm -rf *.o
