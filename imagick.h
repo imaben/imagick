@@ -9,5 +9,7 @@ typedef struct {
     char *host;
     uint_t port;
     uint_t processes;
+    char *logfile;
+    int logmark;
     uint_t daemon:1;
 } imagick_setting_t;

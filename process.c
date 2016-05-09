@@ -12,6 +12,7 @@
 #include <sys/ioctl.h>
 #include "process.h"
 #include "channel.h"
+#include "log.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -115,48 +116,48 @@ static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt
     }
 
     if (s == IMAGICK_MAX_PROCESSES) {
-        fprintf(stderr, "no more than %d processes can be spawned", IMAGICK_MAX_PROCESSES);
+        imagick_log_error("no more than %d processes can be spawned", IMAGICK_MAX_PROCESSES);
         return -1;
     }
 
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, imagick_processes[s].channel) == -1) {
-        fprintf(stderr, "socketpair() failed while spawning");
+        imagick_log_error("socketpair() failed while spawning");
         return -1;
     }
 
     if (imagick_set_nonblocking(imagick_processes[s].channel[0]) == -1) {
-        fprintf(stderr, "failed to set nonblocking");
+        imagick_log_error("failed to set nonblocking");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
 
     if (imagick_set_nonblocking(imagick_processes[s].channel[1]) == -1) {
-        fprintf(stderr, "failed to set nonblocking");
+        imagick_log_error("failed to set nonblocking");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
 
     on = 1;
     if (ioctl(imagick_processes[s].channel[0], FIOASYNC, &on) == -1) {
-        fprintf(stderr, "failed to ioctl()");
+        imagick_log_error("failed to ioctl()");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
 
     if (fcntl(imagick_processes[s].channel[0], F_SETOWN, getpid()) == -1) {
-        // todo
+        imagick_log_error("failed to set F_SETOWN");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
 
     if (fcntl(imagick_processes[s].channel[0], F_SETFD, FD_CLOEXEC) == -1) {
-        // todo
+        imagick_log_error("failed to set F_SETFD");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
 
     if (fcntl(imagick_processes[s].channel[1], F_SETFD, FD_CLOEXEC) == -1) {
-        // todo
+        imagick_log_error("failed to set F_SETFD");
         imagick_close_channel(imagick_processes[s].channel);
         return -1;
     }
@@ -168,7 +169,7 @@ static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt
 
     switch (pid) {
         case -1:
-            // todo
+            imagick_log_error("failed to fork child process");
             imagick_close_channel(imagick_processes[s].channel);
             return -1;
         case 0:
@@ -207,7 +208,7 @@ void imagick_master_process_start(imagick_setting_t *setting)
     sigaddset(&set, SIGINT);
 
     if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
-        fprintf(stderr, "sigprocmask failed");
+        imagick_log_error("sigprocmask failed");
     }
 
     sigemptyset(&set);
