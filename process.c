@@ -10,6 +10,8 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/epoll.h>
+#include <sys/wait.h>
 #include "process.h"
 #include "channel.h"
 #include "log.h"
@@ -100,7 +102,24 @@ static void imagick_set_process_title(const char *fmt, ...)
 
 static void imagick_worker_process_cycle(void *data)
 {
+    imagick_log_debug("worker process %d start", getpid());
+    int epfd;
+    epfd = epoll_create(128);
+    if (-1 == epfd) {
+        imagick_log_error("epoll_create failed");
+        return;
+    }
 
+    struct epoll_event ev;
+    ev.data.fd = imagick_channel;
+    ev.events = EPOLLIN | EPOLLET;
+
+    epoll_ctl(epfd, EPOLL_CTL_ADD, imagick_channel, &ev);
+
+    epoll_wait(epfd, &ev, 20, -1);
+
+    imagick_log_debug("worker process %d exit;", getpid());
+    exit(0);
 }
 
 static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt proc)
@@ -173,6 +192,7 @@ static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt
             imagick_close_channel(imagick_processes[s].channel);
             return -1;
         case 0:
+            strcpy(main_argv[0], name);
             proc(data);
             break;
         default:
@@ -181,6 +201,10 @@ static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt
 
     imagick_processes[s].pid = pid;
     imagick_processes[s].exited = 0;
+
+    if (s == imagick_last_process)
+        imagick_last_process++;
+
     return pid;
 }
 
@@ -198,20 +222,46 @@ static void imagick_worker_process_start(int processes)
     }
 }
 
+void imagick_master_exit(int sig_no)
+{
+    int i;
+    for (i = 0; i < imagick_last_process; i++) {
+        int r = write(imagick_processes[i].channel[0], "\0", 1);
+    }
+}
+
+void imagick_worker_exit(int signo)
+{
+    pid_t pid;
+    int stat;
+    pid = wait(&stat);
+    return;
+}
+
 void imagick_master_process_start(imagick_setting_t *setting)
 {
-    sigset_t set;
+    signal(SIGINT, &imagick_master_exit);
+    signal(SIGCHLD, &imagick_worker_exit);
+
+    sigset_t set, old;
     sigemptyset(&set);
     sigaddset(&set, SIGCHLD);
     sigaddset(&set, SIGALRM);
     sigaddset(&set, SIGIO);
     sigaddset(&set, SIGINT);
 
-    if (sigprocmask(SIG_BLOCK, &set, NULL) == -1) {
-        imagick_log_error("sigprocmask failed");
+    if (sigprocmask(SIG_BLOCK, &set, &old) == -1) {
+        imagick_log_error("sigprocmask SIG_BLOCK failed");
     }
 
     sigemptyset(&set);
 
     imagick_set_process_title(title_master);
+    imagick_worker_process_start(setting->processes);
+
+    if (sigprocmask(SIG_SETMASK, &old, NULL) == -1) {
+        imagick_log_error("sigprocmask SIG_SETMASK failed");
+    }
+
+    sigsuspend(&set);
 }
