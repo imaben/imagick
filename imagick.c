@@ -18,6 +18,8 @@ imagick_setting_t __setting = {
     .daemon    = 0
 }, *imagick_setting = &__setting;
 
+imagick_main_ctx_t __main_ctx, *main_ctx = &__main_ctx;;
+
 static struct option options[] = {
     {"host",        required_argument,   0,   'h'},
     {"port",        required_argument,   0,   'p'},

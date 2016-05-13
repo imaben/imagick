@@ -5,11 +5,21 @@
 
 typedef unsigned int uint_t;
 
-typedef struct {
+typedef struct imagick_setting_s imagick_setting_t;
+
+struct imagick_setting_s {
     char *host;
     uint_t port;
     uint_t processes;
     char *logfile;
     int logmark;
     uint_t daemon:1;
-} imagick_setting_t;
+};
+
+typedef struct imagick_main_ctx_s imagick_main_ctx_t;
+
+struct imagick_main_ctx_s {
+    int sockfd;
+};
+
+extern imagick_main_ctx_t *main_ctx;

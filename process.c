@@ -15,6 +15,7 @@
 #include "channel.h"
 #include "log.h"
 #include "events.h"
+#include "connection.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -332,6 +333,19 @@ void imagick_master_process_start(imagick_setting_t *setting)
     sigemptyset(&set);
 
     imagick_set_process_title(title_master);
+
+    /* init socket listen */
+    main_ctx->sockfd = imagick_listen_socket(setting->host, setting->port);
+    if (main_ctx->sockfd == -1) {
+        imagick_log_error("cannot listen %s:%d", setting->host, setting->port);
+        return;
+    }
+
+    if (imagick_set_nonblocking(main_ctx->sockfd) == -1) {
+        imagick_log_error("Faild to set socket nonblocking");
+        return;
+    }
+
     imagick_worker_process_start(setting->processes);
 
     if (sigprocmask(SIG_SETMASK, &old, NULL) == -1) {
