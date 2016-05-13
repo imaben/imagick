@@ -6,7 +6,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <stropts.h>
+#include <errno.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -100,15 +100,43 @@ static void imagick_set_process_title(const char *fmt, ...)
     prctl(PR_SET_NAME, buf);
 }
 
+static void imagick_worker_process_init()
+{
+
+}
+
+static void imagick_worker_process_exit()
+{
+    imagick_close_channel(imagick_processes[imagick_process_slot].channel);
+    exit(0);
+}
+
+static void imagick_worker_cmd_handler(int sockfd, imagick_channel_cmd_t *cmd)
+{
+    switch (cmd->cmd) {
+        case IMAGICK_PROCESS_CMD_INIT:
+            imagick_worker_process_init();
+            break;
+        case IMAGICK_PROCESS_CMD_EXIT:
+            imagick_worker_process_exit();
+            break;
+        default:
+            break;
+    }
+}
+
 static void imagick_worker_process_cycle(void *data)
 {
     imagick_log_debug("worker process %d start", getpid());
-    int epfd;
+    imagick_channel_cmd_t cmd;
+    int epfd, i, r;
     epfd = epoll_create(128);
     if (-1 == epfd) {
         imagick_log_error("epoll_create failed");
         return;
     }
+
+    struct epoll_event evs[20];
 
     struct epoll_event ev;
     ev.data.fd = imagick_channel;
@@ -116,7 +144,21 @@ static void imagick_worker_process_cycle(void *data)
 
     epoll_ctl(epfd, EPOLL_CTL_ADD, imagick_channel, &ev);
 
-    epoll_wait(epfd, &ev, 20, -1);
+    for (;;) {
+
+        int num = epoll_wait(epfd, evs, 20, -1);
+        for (i = 0; i < num; i++) {
+            if (evs[i].data.fd == imagick_channel) {
+                r = read(imagick_channel, &cmd, sizeof(imagick_channel_cmd_t));
+                if (r == -1) {
+                    imagick_log_warn("read failure, code:%d", errno);
+                    continue;
+                }
+                imagick_worker_cmd_handler(imagick_channel, &cmd);
+            }
+        }
+
+    }
 
     imagick_log_debug("worker process %d exit;", getpid());
     exit(0);
@@ -212,13 +254,27 @@ static void imagick_worker_process_start(int processes)
 {
     int i;
     imagick_channel_t ch;
+    imagick_channel_cmd_t cmd;
+
+    cmd.cmd = IMAGICK_PROCESS_CMD_INIT;
 
     memset(&ch, 0, sizeof(imagick_channel_t));
 
-    ch.command = IMAGICK_CMD_OPEN_CHANNEL;
-
     for (i = 0; i < processes; i++) {
         imagick_spawn_process(title_worker, NULL, imagick_worker_process_cycle);
+        ch.fd = imagick_processes[imagick_process_slot].channel[0];
+        ch.pid = imagick_processes[imagick_process_slot].pid;
+        ch.slot = imagick_process_slot;
+        imagick_write_channel(&ch, &cmd);
+    }
+
+    cmd.cmd = IMAGICK_PROCESS_CMD_EXIT;
+    for (i = 0; i < imagick_last_process; i++) {
+        ch.pid = imagick_processes[i].pid;
+        ch.slot = i;
+        ch.fd = imagick_processes[i].channel[0];
+        imagick_write_channel(&ch, &cmd);
+        sleep(1);
     }
 }
 
@@ -226,7 +282,7 @@ void imagick_master_exit(int sig_no)
 {
     int i;
     for (i = 0; i < imagick_last_process; i++) {
-        int r = write(imagick_processes[i].channel[0], "\0", 1);
+        write(imagick_processes[i].channel[0], "\0", 1);
     }
 }
 
