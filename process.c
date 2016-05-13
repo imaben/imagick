@@ -10,11 +10,11 @@
 #include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/epoll.h>
 #include <sys/wait.h>
 #include "process.h"
 #include "channel.h"
 #include "log.h"
+#include "events.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -31,6 +31,8 @@ int               imagick_process_slot;
 int               imagick_channel;
 int               imagick_last_process;
 imagick_process_t imagick_processes[IMAGICK_MAX_PROCESSES];
+
+imagick_worker_ctx_t *ctx;
 
 static int imagick_set_nonblocking(int fd)
 {
@@ -100,7 +102,27 @@ static void imagick_set_process_title(const char *fmt, ...)
     prctl(PR_SET_NAME, buf);
 }
 
-static void imagick_worker_process_init()
+static int imagick_worker_ctx_init()
+{
+    static imagick_worker_ctx_t __ctx;
+    ctx = &__ctx;
+    ctx->pid = getpid();
+    ctx->rwfd = imagick_channel;
+
+    ctx->epollfd = epoll_create(128);
+
+    if (-1 == ctx->epollfd) {
+        imagick_log_error("epoll_create failed");
+        return -1;
+    }
+
+    ctx->add_event = imagick_add_event;
+    ctx->delete_event = imagick_delete_event;
+    ctx->modify_event = imagick_modify_event;
+    return 0;
+}
+
+static void imagick_listening_init()
 {
 
 }
@@ -108,6 +130,8 @@ static void imagick_worker_process_init()
 static void imagick_worker_process_exit()
 {
     imagick_close_channel(imagick_processes[imagick_process_slot].channel);
+
+    imagick_log_debug("worker process %d exit;", getpid());
     exit(0);
 }
 
@@ -115,7 +139,7 @@ static void imagick_worker_cmd_handler(int sockfd, imagick_channel_cmd_t *cmd)
 {
     switch (cmd->cmd) {
         case IMAGICK_PROCESS_CMD_INIT:
-            imagick_worker_process_init();
+            imagick_listening_init();
             break;
         case IMAGICK_PROCESS_CMD_EXIT:
             imagick_worker_process_exit();
@@ -128,28 +152,26 @@ static void imagick_worker_cmd_handler(int sockfd, imagick_channel_cmd_t *cmd)
 static void imagick_worker_process_cycle(void *data)
 {
     imagick_log_debug("worker process %d start", getpid());
+
+
     imagick_channel_cmd_t cmd;
-    int epfd, i, r;
-    epfd = epoll_create(128);
-    if (-1 == epfd) {
-        imagick_log_error("epoll_create failed");
-        return;
+    int i, r;
+
+    r = imagick_worker_ctx_init();
+    if (r == -1) {
+        goto fail;
     }
 
     struct epoll_event evs[20];
 
-    struct epoll_event ev;
-    ev.data.fd = imagick_channel;
-    ev.events = EPOLLIN | EPOLLET;
-
-    epoll_ctl(epfd, EPOLL_CTL_ADD, imagick_channel, &ev);
+    ctx->add_event(ctx, ctx->rwfd, EPOLLIN | EPOLLET);
 
     for (;;) {
 
-        int num = epoll_wait(epfd, evs, 20, -1);
+        int num = epoll_wait(ctx->epollfd, evs, 20, -1);
         for (i = 0; i < num; i++) {
             if (evs[i].data.fd == imagick_channel) {
-                r = read(imagick_channel, &cmd, sizeof(imagick_channel_cmd_t));
+                r = read(ctx->rwfd, &cmd, sizeof(imagick_channel_cmd_t));
                 if (r == -1) {
                     imagick_log_warn("read failure, code:%d", errno);
                     continue;
@@ -160,8 +182,8 @@ static void imagick_worker_process_cycle(void *data)
 
     }
 
-    imagick_log_debug("worker process %d exit;", getpid());
-    exit(0);
+fail:
+    imagick_worker_process_exit();
 }
 
 static pid_t imagick_spawn_process(char *name, void *data, imagick_spawn_proc_pt proc)
@@ -267,22 +289,19 @@ static void imagick_worker_process_start(int processes)
         ch.slot = imagick_process_slot;
         imagick_write_channel(&ch, &cmd);
     }
+}
 
+void imagick_master_exit(int sig_no)
+{
+    int i;
+    imagick_channel_t ch;
+    imagick_channel_cmd_t cmd;
     cmd.cmd = IMAGICK_PROCESS_CMD_EXIT;
     for (i = 0; i < imagick_last_process; i++) {
         ch.pid = imagick_processes[i].pid;
         ch.slot = i;
         ch.fd = imagick_processes[i].channel[0];
         imagick_write_channel(&ch, &cmd);
-        sleep(1);
-    }
-}
-
-void imagick_master_exit(int sig_no)
-{
-    int i;
-    for (i = 0; i < imagick_last_process; i++) {
-        write(imagick_processes[i].channel[0], "\0", 1);
     }
 }
 
