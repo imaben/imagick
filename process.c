@@ -11,6 +11,9 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
 #include "process.h"
 #include "channel.h"
 #include "log.h"
@@ -156,28 +159,50 @@ static void imagick_worker_process_cycle(void *data)
 
 
     imagick_channel_cmd_t cmd;
-    int i, r;
+    int i, r, connfd;
 
     r = imagick_worker_ctx_init();
     if (r == -1) {
         goto fail;
     }
 
+    struct sockaddr_in clientaddr;
+    socklen_t clilen;
+
     struct epoll_event evs[20];
 
+    /* IPC events */
     ctx->add_event(ctx, ctx->rwfd, EPOLLIN | EPOLLET);
+
+    /* http connection events */
+    ctx->add_event(ctx, main_ctx->sockfd, EPOLLIN | EPOLLET);
 
     for (;;) {
 
         int num = epoll_wait(ctx->epollfd, evs, 20, -1);
         for (i = 0; i < num; i++) {
-            if (evs[i].data.fd == imagick_channel) {
+            if (evs[i].data.fd == imagick_channel) { /* IPC fd */
                 r = read(ctx->rwfd, &cmd, sizeof(imagick_channel_cmd_t));
                 if (r == -1) {
                     imagick_log_warn("read failure, code:%d", errno);
                     continue;
                 }
                 imagick_worker_cmd_handler(imagick_channel, &cmd);
+            } else if (evs[i].data.fd == main_ctx->sockfd) {
+                connfd = accept(main_ctx->sockfd, (struct sockaddr *)&clientaddr, &clilen);
+
+                char *str = inet_ntoa(clientaddr.sin_addr);
+                imagick_log_debug("A new connection from %s", str);
+
+                ctx->add_event(ctx, connfd, EPOLLIN | EPOLLET);
+            } else if (evs[i].events & EPOLLIN) {
+                if (evs[i].data.fd == -1) {
+                    /* Invalid socket fd */
+                    continue;
+                }
+                imagick_connection_t *conn = imagick_connection_create(evs[i].data.fd);
+            } else {
+                imagick_log_error("Unknow fd :%d", evs[i].data.fd);
             }
         }
 

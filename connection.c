@@ -1,10 +1,12 @@
 #include "connection.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include "log.h"
 
 int imagick_listen_socket(char *addr, int port)
 {
@@ -39,4 +41,25 @@ int imagick_listen_socket(char *addr, int port)
 fail:
     close(sock);
     return -1;
+}
+
+int imagick_connection_init()
+{
+    return 0;
+}
+
+imagick_connection_t *imagick_connection_create(int sockfd)
+{
+    imagick_connection_t *conn;
+    conn = (imagick_connection_t *)malloc(sizeof(*conn));
+    if (conn == NULL) {
+        imagick_log_error("Cannot alloc memory to create connection");
+        return NULL;
+    }
+
+    conn->sockfd = sockfd;
+    conn->http_code = 200;
+    http_parser_init(&conn->hp, HTTP_REQUEST);
+
+    return conn;
 }
