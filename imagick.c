@@ -15,6 +15,7 @@ imagick_setting_t __setting = {
     .processes = 10,
     .logfile   = "/tmp/.imagick.log",
     .logmark   = IMAGICK_LOG_LEVEL_DEBUG,
+    .imgroot   = NULL,
     .daemon    = 0
 }, *imagick_setting = &__setting;
 
@@ -26,7 +27,9 @@ static struct option options[] = {
     {"processes",   required_argument,   0,   'c'},
     {"logfile",     required_argument,   0,   'l'},
     {"logmark",     required_argument,   0,   'm'},
+    {"imgroot",     required_argument,   0,   'r'},
     {"daemon",      no_argument,         0,   'd'},
+    {"help",        no_argument,         0,   '?'},
     {0, 0, 0, 0}
 };
 
@@ -34,6 +37,21 @@ static struct option options[] = {
     fprintf(stderr, fmt, ##__VA_ARGS__); \
     exit(1); \
 } while (0)
+
+static void imagick_usage()
+{
+    char *usage =
+        "Usage: imagick [options] [-h] <host> [-p] <port> [--] [args...]\n\n"
+        " --host <host>\t\t\t\tThe host to bind\n"
+        " --port <port>\t\t\t\tThe port to listen\n"
+        " --processes <processes>\t\tThe worker processes number\n"
+        " --logfile <file>\t\t\tThe log file to output\n"
+        " --logmark <debug|notice|warn|error>\tWhich level log would be mark\n"
+        " --daemon\t\t\t\t Using daemonize mode\n"
+        " --help\t\t\t\t\tDiskplay the usage";
+    fprintf(stdout, usage);
+    exit(0);
+}
 
 static void imagick_parse_options(int argc, char **argv)
 {
@@ -74,7 +92,14 @@ static void imagick_parse_options(int argc, char **argv)
                     fail("Invalid logmark argument\n");
                 }
                 break;
+            case 'r':
+                imagick_setting->imgroot = strdup(optarg);
+                break;
+            case '?':
+                imagick_usage();
+                break;
             default:
+                imagick_usage();
                 break;
         }
     }
@@ -88,6 +113,10 @@ int main (int argc, char **argv)
     signal(SIGPIPE, SIG_IGN);
 
     imagick_parse_options(argc, argv);
+
+    if (imagick_setting->imgroot == NULL) {
+        fail("Image root cannot be empty!\n");
+    }
 
     if (imagick_init_log(imagick_setting->logfile, imagick_setting->logmark) == -1) {
         fail("Failed to initialize log file:%s\n", imagick_setting->logfile);

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include "log.h"
 
 int imagick_listen_socket(char *addr, int port)

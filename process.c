@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include "process.h"
 #include "channel.h"
 #include "log.h"

@@ -13,6 +13,7 @@ struct imagick_setting_s {
     uint_t processes;
     char *logfile;
     int logmark;
+    char *imgroot;
     uint_t daemon:1;
 };
 
