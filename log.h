@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdio.h>
+
 #define IMAGICK_LOG_LEVEL_DEBUG   0
 #define IMAGICK_LOG_LEVEL_NOTICE  1
 #define IMAGICK_LOG_LEVEL_WARN   2

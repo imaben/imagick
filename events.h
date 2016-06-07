@@ -6,11 +6,12 @@
 #define IE_READABLE 1
 #define IE_WRITABLE 2
 
-typedef (void *imagick_event_handler)(imagick_event_loop_t event_loop, int fd, void *arg);
 
 typedef struct imagick_event_s imagick_event_t;
 typedef struct imagick_event_fired_s imagick_event_fired_t;
 typedef struct imagick_event_loop_s imagick_event_loop_t;
+
+typedef void (*imagick_event_handler)(imagick_event_loop_t event_loop, int fd, void *arg);
 
 struct imagick_event_s {
     int mask; /* once of IE_(READABLE|WRITABLE) */
@@ -25,13 +26,15 @@ struct imagick_event_fired_s {
 };
 
 struct imagick_event_loop_s {
+    int epollfd;
     int maxfd;
     int setsize;
     imagick_event_t *events;
     imagick_event_fired_t *fired;
+    int stop;
 };
 
-
+imagick_event_loop_t *imagick_create_event_loop(int setsize);
 void imagick_add_event(imagick_worker_ctx_t *ctx, int fd, int flags);
 void imagick_delete_event(imagick_worker_ctx_t *ctx, int fd, int flags);
 void imagick_modify_event(imagick_worker_ctx_t *ctx, int fd, int flags);
