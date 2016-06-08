@@ -1,8 +1,10 @@
 #include "events.h"
+#include <sys/epoll.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "log.h"
 
-imagick_event_loop_t *imagick_create_event_loop(int setsize)
+imagick_event_loop_t *imagick_event_loop_create(int setsize)
 {
     imagick_event_loop_t *loop = NULL;
     int i;
@@ -18,44 +20,142 @@ imagick_event_loop_t *imagick_create_event_loop(int setsize)
         imagick_log_error("failed to create event instance");
         goto fail;
     }
+
     loop->events = malloc(sizeof(imagick_event_t) * setsize);
-    loop->fired = malloc(sizeof(imagick_event_fired_t) * setsize);
-    if (NULL == loop->events || NULL == loop->fired) {
-        imagick_log_error("failed to create event loop");
+    if (NULL == loop->events) {
+        imagick_log_error("failed to create events");
+        close(loop->epollfd);
         goto fail;
     }
+
+    loop->fired = malloc(sizeof(imagick_event_fired_t) * setsize);
+    if (NULL == loop->fired) {
+        imagick_log_error("failed to create fired");
+        free(loop->events);
+        close(loop->epollfd);
+        goto fail;
+    }
+
+    loop->events_active = malloc(sizeof(struct epoll_event) * setsize);
+    if (NULL == loop->events_active) {
+        imagick_log_error("failed to create events_active");
+        free(loop->events);
+        free(loop->fired);
+        close(loop->epollfd);
+        goto fail;
+    }
+
     loop->setsize = setsize;
     loop->stop = 0;
+
+    loop->add_event = imagick_add_event;
+    loop->del_event = imagick_delete_event;
+    loop->dispatch = imagick_event_dispatch;
 
     for (i = 0; i < setsize; i++) {
         loop->events[i].mask = IE_NONE;
     }
+    return loop;
 
 fail:
-    return loop;
+    return NULL;
 }
 
-void imagick_add_event(imagick_worker_ctx_t *ctx, int fd, int flags)
+void imagick_event_loop_free(imagick_event_loop_t *loop)
 {
-    struct epoll_event ev;
-    ev.events = flags;
-    ev.data.fd = fd;
-    epoll_ctl(ctx->epollfd, EPOLL_CTL_ADD, fd, &ev);
+    free(loop->events);
+    free(loop->fired);
+    free(loop);
 }
 
-void imagick_delete_event(imagick_worker_ctx_t *ctx, int fd, int flags)
+void imagick_event_loop_stop(imagick_event_loop_t *loop)
 {
-    struct epoll_event ev;
-    ev.events = flags;
-    ev.data.fd = fd;
-    epoll_ctl(ctx->epollfd, EPOLL_CTL_DEL, fd, &ev);
+    loop->stop = 1;
 }
 
-void imagick_modify_event(imagick_worker_ctx_t *ctx, int fd, int flags)
+int imagick_add_event(imagick_event_loop_t *loop, int fd, int mask,
+        imagick_event_handler proc, void *arg)
 {
-    struct epoll_event ev;
-    ev.events = flags;
-    ev.data.fd = fd;
-    epoll_ctl(ctx->epollfd, EPOLL_CTL_MOD, fd, &ev);
+    if (fd >= loop->setsize) {
+        return -1;
+    }
+
+    imagick_event_t *ev = &loop->events[fd];
+    ev->mask |= mask;
+    if (mask & IE_READABLE) {
+        ev->read_proc = proc;
+    }
+    if (mask & IE_WRITABLE) {
+        ev->write_proc = proc;
+    }
+    ev->arg = arg;
+
+    struct epoll_event ee = {0};
+    int op = loop->events[fd].mask == IE_NONE ?
+            EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+    ee.events = 0;
+    ee.data.fd = fd;
+
+    if (epoll_ctl(loop->epollfd, op, fd, &ee) == -1) {
+        return -1;
+    }
+
+    if (fd > loop->maxfd) {
+        loop->maxfd = fd;
+    }
+    return 0;
 }
 
+void imagick_delete_event(imagick_event_loop_t *loop, int fd, int delmask)
+{
+    if (fd > loop->setsize) {
+        return;
+    }
+
+    imagick_event_t *ev = &loop->events[fd];
+    if (ev->mask == IE_NONE) {
+        return;
+    }
+
+    int mask = loop->events[fd].mask & (~delmask);
+
+    struct epoll_event ee;
+    ee.events = 0;
+    if (mask & IE_READABLE) {
+        ee.events |= EPOLLIN;
+    }
+    if (mask & IE_WRITABLE) {
+        ee.events |= EPOLLOUT;
+    }
+    ee.data.fd = fd;
+    if (mask != IE_NONE) {
+        epoll_ctl(loop->epollfd, EPOLL_CTL_DEL, fd, &ee);
+    } else {
+        /* Note, Kernel < 2.6.9 requires a non null event pointer even for
+         * EPOLL_CTL_DEL. */
+        epoll_ctl(loop->epollfd, EPOLL_CTL_DEL, fd, &ee);
+    }
+}
+
+int imagick_event_dispatch(imagick_event_loop_t *loop)
+{
+    int retval, events_num;
+    retval = epoll_wait(loop->epollfd, loop->events_active, loop->setsize, -1);
+    if (retval > 0) {
+        int j;
+        events_num = retval;
+        for (j = 0; j < events_num; j++) {
+            int mask = 0;
+            struct epoll_event *e = loop->events_active + j;
+
+            if (e->events & EPOLLIN) mask |= IE_READABLE;
+            if (e->events & EPOLLOUT) mask |= IE_WRITABLE;
+            if (e->events & EPOLLERR) mask |= IE_WRITABLE;
+            if (e->events & EPOLLHUP) mask |= IE_WRITABLE;
+
+            loop->fired[j].fd = e->data.fd;
+            loop->fired[j].mask = mask;
+        }
+    }
+    return events_num;
+}

@@ -12,14 +12,13 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "process.h"
 #include "channel.h"
 #include "log.h"
-#include "events.h"
 #include "connection.h"
+#include "worker.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -114,16 +113,8 @@ static int imagick_worker_ctx_init()
     ctx->pid = getpid();
     ctx->rwfd = imagick_channel;
 
-    ctx->epollfd = epoll_create(128);
+    ctx->loop = imagick_event_loop_create(IE_DEFAULT_FD_COUNT);
 
-    if (-1 == ctx->epollfd) {
-        imagick_log_error("epoll_create failed");
-        return -1;
-    }
-
-    ctx->add_event = imagick_add_event;
-    ctx->delete_event = imagick_delete_event;
-    ctx->modify_event = imagick_modify_event;
     return 0;
 }
 
@@ -170,14 +161,14 @@ static void imagick_worker_process_cycle(void *data)
     struct sockaddr_in clientaddr;
     socklen_t clilen;
 
-    struct epoll_event evs[20];
-
     /* IPC events */
-    ctx->add_event(ctx, ctx->rwfd, EPOLLIN | EPOLLET);
+    ctx->loop->add_event(ctx->loop, ctx->rwfd, IE_READABLE, imagick_ipc_handler, NULL);
 
     /* http connection events */
-    ctx->add_event(ctx, main_ctx->sockfd, EPOLLIN | EPOLLET);
+    ctx->loop->add_event(ctx->loop, main_ctx->sockfd, IE_READABLE, imagick_http_handler, NULL);
 
+    ctx->loop->dispatch(ctx->loop);
+#if 0
     for (;;) {
 
         int num = epoll_wait(ctx->epollfd, evs, 20, -1);
@@ -208,7 +199,7 @@ static void imagick_worker_process_cycle(void *data)
         }
 
     }
-
+#endif
 fail:
     imagick_worker_process_exit();
 }

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <sys/epoll.h>
+#include <sys/types.h>
 #include "imagick.h"
+#include "events.h"
 
 extern int imagick_argc;
 extern char **imagick_argv;
@@ -31,12 +32,7 @@ struct imagick_process_s {
 struct imagick_worker_ctx_s {
     pid_t pid;
     int rwfd;
-    int epollfd;
-
-    /* handling function */
-    void (*add_event)(imagick_worker_ctx_t *ctx, int fd, int flags);
-    void (*delete_event)(imagick_worker_ctx_t *ctx, int fd, int flags);
-    void (*modify_event)(imagick_worker_ctx_t *ctx, int fd, int flags);
+    struct imagick_event_loop_s *loop;
 };
 
 void imagick_master_process_start(imagick_setting_t *setting);
