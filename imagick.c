@@ -42,13 +42,14 @@ static void imagick_usage()
 {
     char *usage =
         "Usage: imagick [options] [-h] <host> [-p] <port> [--] [args...]\n\n"
-        " --host <host>\t\t\t\tThe host to bind\n"
-        " --port <port>\t\t\t\tThe port to listen\n"
-        " --processes <processes>\t\tThe worker processes number\n"
-        " --logfile <file>\t\t\tThe log file to output\n"
-        " --logmark <debug|notice|warn|error>\tWhich level log would be mark\n"
-        " --daemon\t\t\t\t Using daemonize mode\n"
-        " --help\t\t\t\t\tDiskplay the usage";
+        " -h --host <host>\t\t\t\tThe host to bind\n"
+        " -p --port <port>\t\t\t\tThe port to listen\n"
+        " -c --processes <processes>\t\tThe worker processes number\n"
+        " -r --imgroot <dir>\t\tThe images root path\n"
+        " -l --logfile <file>\t\t\tThe log file to output\n"
+        " -m --logmark <debug|notice|warn|error>\tWhich level log would be mark\n"
+        " -d --daemon\t\t\t\t Using daemonize mode\n"
+        " --help\t\t\t\t\tDiskplay the usage\n";
     fprintf(stdout, usage);
     exit(0);
 }

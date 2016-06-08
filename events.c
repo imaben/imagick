@@ -65,6 +65,7 @@ void imagick_event_loop_free(imagick_event_loop_t *loop)
 {
     free(loop->events);
     free(loop->fired);
+    free(loop->events_active);
     free(loop);
 }
 
