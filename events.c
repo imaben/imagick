@@ -138,7 +138,7 @@ void imagick_delete_event(imagick_event_loop_t *loop, int fd, int delmask)
     }
 }
 
-int imagick_event_dispatch(imagick_event_loop_t *loop)
+int imagick_events_wait(imagick_event_loop_t *loop)
 {
     int retval, events_num;
     retval = epoll_wait(loop->epollfd, loop->events_active, loop->setsize, -1);
@@ -159,4 +159,9 @@ int imagick_event_dispatch(imagick_event_loop_t *loop)
         }
     }
     return events_num;
+}
+
+int imagick_event_dispatch(imagick_event_loop_t *loop)
+{
+    return 0;
 }
