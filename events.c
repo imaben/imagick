@@ -163,10 +163,10 @@ int imagick_event_poll(imagick_event_loop_t *loop)
 
 int imagick_event_dispatch(imagick_event_loop_t *loop)
 {
-    int events_num = 0, i = 0;
+    int events_num = 0, i;
     events_num = imagick_event_poll(loop);
     while (!loop->stop) {
-        for (; i < events_num; i++) {
+        for (i = 0; i < events_num; i++) {
             imagick_event_t *ev = &loop->events[loop->fired[i].fd];
             int mask = loop->fired[i].mask;
             int fd = loop->fired[i].fd;
