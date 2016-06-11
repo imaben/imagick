@@ -138,7 +138,7 @@ void imagick_delete_event(imagick_event_loop_t *loop, int fd, int delmask)
     }
 }
 
-int imagick_events_wait(imagick_event_loop_t *loop)
+int imagick_event_poll(imagick_event_loop_t *loop)
 {
     int retval, events_num;
     retval = epoll_wait(loop->epollfd, loop->events_active, loop->setsize, -1);
@@ -163,5 +163,22 @@ int imagick_events_wait(imagick_event_loop_t *loop)
 
 int imagick_event_dispatch(imagick_event_loop_t *loop)
 {
+    int events_num = 0, i = 0;
+    events_num = imagick_event_poll(loop);
+    while (!loop->stop) {
+        for (; i < events_num; i++) {
+            imagick_event_t *ev = &loop->events[loop->fired[i].fd];
+            int mask = loop->fired[i].mask;
+            int fd = loop->fired[i].fd;
+
+            if (ev->mask & mask & IE_READABLE) {
+                ev->read_proc(loop, fd, ev->arg);
+            }
+
+            if (ev->mask & mask & IE_WRITABLE) {
+                ev->write_proc(loop, fd, ev->arg);
+            }
+        }
+    }
     return 0;
 }

@@ -46,6 +46,6 @@ void imagick_event_loop_stop(imagick_event_loop_t *loop);
 
 int imagick_add_event(imagick_event_loop_t *loop, int fd, int mask, imagick_event_handler proc, void *arg);
 void imagick_delete_event(imagick_event_loop_t *loop, int fd, int delmask);
-int imagick_events_wait(imagick_event_loop_t *loop);
+int imagick_event_poll(imagick_event_loop_t *loop);
 int imagick_event_dispatch(imagick_event_loop_t *loop);
 
