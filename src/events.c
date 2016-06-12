@@ -21,14 +21,14 @@ imagick_event_loop_t *imagick_event_loop_create(int setsize)
         goto fail;
     }
 
-    loop->events = malloc(sizeof(imagick_event_t) * setsize);
+    loop->events = calloc(sizeof(imagick_event_t), setsize);
     if (NULL == loop->events) {
         imagick_log_error("failed to create events");
         close(loop->epollfd);
         goto fail;
     }
 
-    loop->fired = malloc(sizeof(imagick_event_fired_t) * setsize);
+    loop->fired = calloc(sizeof(imagick_event_fired_t), setsize);
     if (NULL == loop->fired) {
         imagick_log_error("failed to create fired");
         free(loop->events);
@@ -36,7 +36,7 @@ imagick_event_loop_t *imagick_event_loop_create(int setsize)
         goto fail;
     }
 
-    loop->events_active = malloc(sizeof(struct epoll_event) * setsize);
+    loop->events_active = calloc(sizeof(struct epoll_event), setsize);
     if (NULL == loop->events_active) {
         imagick_log_error("failed to create events_active");
         free(loop->events);
@@ -81,21 +81,24 @@ int imagick_add_event(imagick_event_loop_t *loop, int fd, int mask,
         return -1;
     }
 
+    int op = loop->events[fd].mask == IE_NONE ?
+            EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+
+    struct epoll_event ee = {0};
+    ee.events = 0;
+    ee.data.fd = fd;
+
     imagick_event_t *ev = &loop->events[fd];
     ev->mask |= mask;
     if (mask & IE_READABLE) {
         ev->read_proc = proc;
+        ee.events |= EPOLLIN;
     }
     if (mask & IE_WRITABLE) {
         ev->write_proc = proc;
+        ee.events |= EPOLLOUT;
     }
     ev->arg = arg;
-
-    struct epoll_event ee = {0};
-    int op = loop->events[fd].mask == IE_NONE ?
-            EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-    ee.events = 0;
-    ee.data.fd = fd;
 
     if (epoll_ctl(loop->epollfd, op, fd, &ee) == -1) {
         return -1;
@@ -164,8 +167,8 @@ int imagick_event_poll(imagick_event_loop_t *loop)
 int imagick_event_dispatch(imagick_event_loop_t *loop)
 {
     int events_num = 0, i;
-    events_num = imagick_event_poll(loop);
     while (!loop->stop) {
+        events_num = imagick_event_poll(loop);
         for (i = 0; i < events_num; i++) {
             imagick_event_t *ev = &loop->events[loop->fired[i].fd];
             int mask = loop->fired[i].mask;
