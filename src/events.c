@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include "log.h"
 
+#define USE_ET_MODE
+
 imagick_event_loop_t *imagick_event_loop_create(int setsize)
 {
     imagick_event_loop_t *loop = NULL;
@@ -98,6 +100,9 @@ int imagick_add_event(imagick_event_loop_t *loop, int fd, int mask,
         ev->write_proc = proc;
         ee.events |= EPOLLOUT;
     }
+#ifdef USE_ET_MODE
+    ee.events |= EPOLLET;
+#endif
     ev->arg = arg;
 
     if (epoll_ctl(loop->epollfd, op, fd, &ee) == -1) {
