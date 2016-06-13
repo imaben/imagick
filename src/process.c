@@ -11,7 +11,6 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
-#include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "process.h"
@@ -19,6 +18,7 @@
 #include "log.h"
 #include "connection.h"
 #include "worker.h"
+#include "utils.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -37,17 +37,6 @@ int               imagick_last_process;
 imagick_process_t imagick_processes[IMAGICK_MAX_PROCESSES];
 
 imagick_worker_ctx_t *ctx;
-
-static int imagick_set_nonblocking(int fd)
-{
-    int flags;
-
-    if ((flags = fcntl(fd, F_GETFL, 0)) < 0 ||
-            fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        return -1;
-    }
-    return 0;
-}
 
 static void imagick_set_process_title_init(int argc, char **argv, char **envp)
 {
@@ -145,12 +134,22 @@ static void imagick_worker_cmd_handler(int sockfd, imagick_channel_cmd_t *cmd)
     }
 }
 
+static void imagick_ipc_handler(imagick_event_loop_t *loop, int fd, void *arg)
+{
+    int r;
+    imagick_channel_cmd_t cmd;
+    r = read(ctx->rwfd, &cmd, sizeof(imagick_channel_cmd_t));
+    if (r == -1) {
+        imagick_log_warn("read failure, code:%d", errno);
+        return;
+    }
+    imagick_worker_cmd_handler(imagick_channel, &cmd);
+}
+
 static void imagick_worker_process_cycle(void *data)
 {
     imagick_log_debug("worker process %d start", getpid());
 
-
-    imagick_channel_cmd_t cmd;
     int i, r, connfd;
 
     r = imagick_worker_ctx_init();
@@ -165,7 +164,7 @@ static void imagick_worker_process_cycle(void *data)
     ctx->loop->add_event(ctx->loop, ctx->rwfd, IE_READABLE, imagick_ipc_handler, NULL);
 
     /* http connection events */
-    ctx->loop->add_event(ctx->loop, main_ctx->sockfd, IE_READABLE, imagick_http_handler, NULL);
+    ctx->loop->add_event(ctx->loop, main_ctx->sockfd, IE_READABLE, imagick_main_sock_handler, NULL);
 
     ctx->loop->dispatch(ctx->loop);
 #if 0
@@ -174,12 +173,6 @@ static void imagick_worker_process_cycle(void *data)
         int num = epoll_wait(ctx->epollfd, evs, 20, -1);
         for (i = 0; i < num; i++) {
             if (evs[i].data.fd == imagick_channel) { /* IPC fd */
-                r = read(ctx->rwfd, &cmd, sizeof(imagick_channel_cmd_t));
-                if (r == -1) {
-                    imagick_log_warn("read failure, code:%d", errno);
-                    continue;
-                }
-                imagick_worker_cmd_handler(imagick_channel, &cmd);
             } else if (evs[i].data.fd == main_ctx->sockfd) {
                 connfd = accept(main_ctx->sockfd, (struct sockaddr *)&clientaddr, &clilen);
 
