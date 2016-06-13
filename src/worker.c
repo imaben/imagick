@@ -20,7 +20,7 @@ void imagick_main_sock_handler(imagick_event_loop_t *loop, int fd, void *arg)
     for (;;) {
         connfd = accept(fd, (struct sockaddr *)&clientaddr, &clientlen);
         if (connfd == -1) {
-            if (errno = EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             }
         }
