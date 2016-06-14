@@ -41,6 +41,9 @@ int listen_socket(char *addr, int port)
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &flags, sizeof(flags));
     setsockopt(sock, SOL_SOCKET, SO_LINGER, &ln, sizeof(ln));
+#if !defined(TCP_NOPUSH) && defined(TCP_NODELAY)
+        setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags));
+#endif
 
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port);
@@ -60,12 +63,40 @@ fail:
     return -1;
 }
 
+void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
+{
+    fprintf(stdout, "send fd:%d\n", fd);
+    char buf[1024] = {0};
+    int n;
+    sprintf(buf, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\nHello World", 11);
+    int nwrite, data_size = strlen(buf);
+    n = data_size;
+    while (n > 0) {
+        nwrite = write(fd, buf + data_size - n, n);
+        if (nwrite < n) {
+            if (nwrite == -1 && errno != EAGAIN) {
+                fprintf(stderr, "write error");
+            }
+            break;
+        }
+        n -= nwrite;
+    }
+    loop->del_event(loop, fd, IE_READABLE | IE_WRITABLE);
+    close(fd);
+}
+
 void sock_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
+    fprintf(stdout, "recv fd:%d\n", fd);
     char buf[1024] = {0};
-    read(fd, buf, 1024);
-    fprintf(stdout, buf);
-    loop->del_event(loop, fd, IE_READABLE);
+    int n = 0, nread;
+    while ((nread = read(fd, buf + n, 1024 - n)) > 0) {
+        n += nread;
+    }
+    if (nread == -1 && errno != EAGAIN) {
+        fprintf(stderr, "read error");
+    }
+    loop->add_event(loop, fd, IE_WRITABLE, sock_send_handler, NULL);
 }
 
 void main_sock_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
@@ -83,8 +114,9 @@ void main_sock_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
                 break;
             }
         }
+        fprintf(stdout, "new client%d\n", connfd);
         set_nonblocking(connfd);
-        loop->add_event(loop, connfd, IE_READABLE, main_sock_recv_handler, NULL);
+        loop->add_event(loop, connfd, IE_READABLE, sock_recv_handler, NULL);
     }
 }
 

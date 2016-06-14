@@ -90,14 +90,23 @@ int imagick_add_event(imagick_event_loop_t *loop, int fd, int mask,
     ee.events = 0;
     ee.data.fd = fd;
 
+    int mask_merge = mask;
+    mask_merge |= loop->events[fd].mask;
+
     imagick_event_t *ev = &loop->events[fd];
-    ev->mask |= mask;
+    ev->mask = mask_merge;
+
     if (mask & IE_READABLE) {
         ev->read_proc = proc;
-        ee.events |= EPOLLIN;
     }
     if (mask & IE_WRITABLE) {
         ev->write_proc = proc;
+    }
+
+    if (mask_merge & IE_READABLE) {
+        ee.events |= EPOLLIN;
+    }
+    if (mask_merge & IE_WRITABLE) {
         ee.events |= EPOLLOUT;
     }
 #ifdef USE_ET_MODE
@@ -138,11 +147,19 @@ void imagick_delete_event(imagick_event_loop_t *loop, int fd, int delmask)
     }
     ee.data.fd = fd;
     if (mask != IE_NONE) {
-        epoll_ctl(loop->epollfd, EPOLL_CTL_DEL, fd, &ee);
+        epoll_ctl(loop->epollfd, EPOLL_CTL_MOD, fd, &ee);
     } else {
         /* Note, Kernel < 2.6.9 requires a non null event pointer even for
          * EPOLL_CTL_DEL. */
         epoll_ctl(loop->epollfd, EPOLL_CTL_DEL, fd, &ee);
+    }
+
+    ev->mask = ev->mask & (~delmask);
+    if (loop->maxfd == fd && ev->mask == IE_NONE) {
+        int j ;
+        for (j = loop->maxfd - 1; j >=0; j--)
+            if (loop->events[j].mask != IE_NONE) break;
+        loop->maxfd = j;
     }
 }
 
