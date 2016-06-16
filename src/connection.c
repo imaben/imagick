@@ -25,6 +25,9 @@ int imagick_listen_socket(char *addr, int port)
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &flags, sizeof(flags));
     setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &flags, sizeof(flags));
     setsockopt(sock, SOL_SOCKET, SO_LINGER, &ln, sizeof(ln));
+#if !defined(TCP_NOPUSH) && defined(TCP_NODELAY)
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags));
+#endif
 
     sin.sin_family = AF_INET;
     sin.sin_port = htons(port);

@@ -149,7 +149,6 @@ static void imagick_ipc_handler(imagick_event_loop_t *loop, int fd, void *arg)
 static void imagick_worker_process_cycle(void *data)
 {
     imagick_log_debug("worker process %d start", getpid());
-
     int i, r, connfd;
 
     r = imagick_worker_ctx_init();
@@ -167,32 +166,7 @@ static void imagick_worker_process_cycle(void *data)
     ctx->loop->add_event(ctx->loop, main_ctx->sockfd, IE_READABLE, imagick_main_sock_handler, NULL);
 
     ctx->loop->dispatch(ctx->loop);
-#if 0
-    for (;;) {
 
-        int num = epoll_wait(ctx->epollfd, evs, 20, -1);
-        for (i = 0; i < num; i++) {
-            if (evs[i].data.fd == imagick_channel) { /* IPC fd */
-            } else if (evs[i].data.fd == main_ctx->sockfd) {
-                connfd = accept(main_ctx->sockfd, (struct sockaddr *)&clientaddr, &clilen);
-
-                char *str = inet_ntoa(clientaddr.sin_addr);
-                imagick_log_debug("A new connection from %s", str);
-
-                ctx->add_event(ctx, connfd, EPOLLIN | EPOLLET);
-            } else if (evs[i].events & EPOLLIN) {
-                if (evs[i].data.fd == -1) {
-                    /* Invalid socket fd */
-                    continue;
-                }
-                imagick_connection_t *conn = imagick_connection_create(evs[i].data.fd);
-            } else {
-                imagick_log_error("Unknow fd :%d", evs[i].data.fd);
-            }
-        }
-
-    }
-#endif
 fail:
     imagick_worker_process_exit();
 }

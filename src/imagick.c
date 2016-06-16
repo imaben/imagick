@@ -33,7 +33,7 @@ static struct option options[] = {
     {0, 0, 0, 0}
 };
 
-#define fail(fmt, ...) do { \
+#define fatal(fmt, ...) do { \
     fprintf(stderr, fmt, ##__VA_ARGS__); \
     exit(1); \
 } while (0)
@@ -90,7 +90,7 @@ static void imagick_parse_options(int argc, char **argv)
                 } else if (strcasecmp(optarg, "error") == 0) {
                     imagick_setting->logmark = IMAGICK_LOG_LEVEL_ERROR;
                 } else {
-                    fail("Invalid logmark argument\n");
+                    fatal("Invalid logmark argument\n");
                 }
                 break;
             case 'r':
@@ -116,11 +116,11 @@ int main (int argc, char **argv)
     imagick_parse_options(argc, argv);
 
     if (imagick_setting->imgroot == NULL) {
-        fail("Image root cannot be empty!\n");
+        fatal("Image root cannot be empty!\n");
     }
 
     if (imagick_init_log(imagick_setting->logfile, imagick_setting->logmark) == -1) {
-        fail("Failed to initialize log file:%s\n", imagick_setting->logfile);
+        fatal("Failed to initialize log file:%s\n", imagick_setting->logfile);
     }
 
     if (imagick_setting->daemon) {
