@@ -25,10 +25,3 @@ struct imagick_main_ctx_s {
 
 
 extern imagick_main_ctx_t *main_ctx;
-
-typedef struct imagick_connection_s imagick_connection_t;
-
-struct imagick_connection_s {
-    int sockfd;
-    int http_code;
-};
