@@ -16,14 +16,21 @@ struct http_parser_settings hp_setting;
 static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
     imagick_connection_t *c = arg;
-    fprintf(stdout, "send fd:%d, pid:%d\n", c->sockfd, getpid());
-    char buf[1024] = {0};
+
+    if (c->status == IC_STATUS_SEND_HEADER) {
+    }
+
+    imagick_log_debug("send fd:%d, pid:%d\n", c->sockfd, getpid());
+    char header[256] = {0};
+    sprintf(header, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", c->rbuf.len);
+    smart_str wbuf;
+    smart_str_appends(&wbuf, header);
+    smart_str_appends(&wbuf, c->rbuf.c);
     int n;
-    sprintf(buf, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\nHello World", 11);
-    int nwrite, data_size = strlen(buf);
+    int nwrite, data_size = c->rbuf.len;
     n = data_size;
     while (n > 0) {
-        nwrite = write(c->sockfd, buf + data_size - n, n);
+        nwrite = write(c->sockfd, c->rbuf.c + data_size - n, n);
         if (nwrite < n) {
             if (nwrite == -1 && errno != EAGAIN) {
                 fprintf(stderr, "write error");
@@ -36,19 +43,49 @@ static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
     imagick_connection_free(c);
 }
 
-static void imagick_http_handler(imagick_event_loop_t *loop, int fd, void *arg)
+static int imagick_parse_http(imagick_connection_t *c)
+{
+    // todo
+    return 0;
+}
+
+static void imagick_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
     imagick_connection_t *c = arg;
-    fprintf(stdout, "recv fd:%d, pid:%d:\n", c->sockfd, getpid());
-    char buf[1024] = {0};
-    int n = 0, nread;
-    while ((nread = read(c->sockfd, buf + n, 1024 - n)) > 0) {
-        n += nread;
+
+    if (c->status == IC_STATUS_WAIT_RECV) {
+        c->status = IC_STATUS_RECEIVING;
+    }
+
+    imagick_log_debug("recv fd:%d, pid:%d:\n", c->sockfd, getpid());
+
+    char buf[128] = {0};
+    int nread;
+    while ((nread = read(c->sockfd, buf, 128)) > 0) {
+        smart_str_appendl(&c->rbuf, buf, nread);
     }
     if (nread == -1 && errno != EAGAIN) {
-        fprintf(stderr, "read error");
+        imagick_log_warn("Failed to read data %d", fd);
+        goto fatal;
+        return;
     }
+
+    if (nread == EAGAIN || nread == EWOULDBLOCK) {
+        return;
+    }
+    // read complete
+    smart_str_0(&c->rbuf);
+    if (imagick_parse_http(c) == -1) {
+        goto fatal;
+    }
+
+    c->status = IC_STATUS_SEND_HEADER;
     loop->add_event(loop, c->sockfd, IE_WRITABLE, sock_send_handler, c);
+    return;
+
+fatal:
+    loop->del_event(loop, c->sockfd, IE_READABLE);
+    imagick_connection_free(c);
 }
 
 void imagick_main_sock_handler(imagick_event_loop_t *loop, int fd, void *arg)
@@ -67,6 +104,6 @@ void imagick_main_sock_handler(imagick_event_loop_t *loop, int fd, void *arg)
         imagick_log_debug("new connection %d\n", fd);
         imagick_set_nonblocking(connfd);
         imagick_connection_t *c = imagick_connection_create(connfd);
-        loop->add_event(loop, connfd, IE_READABLE, imagick_http_handler, c);
+        loop->add_event(loop, connfd, IE_READABLE, imagick_recv_handler, c);
     }
 }
