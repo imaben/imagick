@@ -14,6 +14,8 @@ typedef struct imagick_connection_s imagick_connection_t;
 typedef struct imagick_cache_s imagick_cache_t;
 
 struct imagick_cache_s {
+    int size;
+    void *data;
 };
 
 struct imagick_connection_s {
@@ -23,7 +25,7 @@ struct imagick_connection_s {
     struct http_parser hp;
     smart_str rbuf; /* read buffer */
     smart_str wbuf; /* write buffer */
-    int wpos; /* pos of header */
+    int wpos; /* pos of header or body */
     imagick_cache_t *cache;
 };
 
