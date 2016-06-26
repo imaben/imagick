@@ -21,6 +21,7 @@
 #include "utils.h"
 #include "ncx_slab.h"
 #include "ncx_lock.h"
+#include "hash.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -344,6 +345,13 @@ void imagick_master_process_start(imagick_setting_t *setting)
     main_ctx->pool->min_shift = 3;
     main_ctx->pool->end = space + setting->max_cache;
     ncx_slab_init(main_ctx->pool);
+
+    /* init hash table */
+    main_ctx->cache_ht = imagick_hash_new(0, NULL, NULL);
+    if (main_ctx->cache_ht == NULL) {
+        imagick_log_error("Failed to initialize HashTable");
+        return;
+    }
 
     imagick_worker_process_start(setting->processes);
 

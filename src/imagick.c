@@ -20,7 +20,7 @@ imagick_setting_t __setting = {
     .max_cache = IMAGICK_CACHE_MIN_SIZE
 }, *imagick_setting = &__setting;
 
-imagick_main_ctx_t __main_ctx, *main_ctx = &__main_ctx;;
+imagick_ctx_t __main_ctx, *main_ctx = &__main_ctx;;
 
 static struct option options[] = {
     {"host",        required_argument,   0,   'h'},
