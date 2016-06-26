@@ -19,6 +19,8 @@
 #include "connection.h"
 #include "worker.h"
 #include "utils.h"
+#include "ncx_slab.h"
+#include "ncx_lock.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -329,6 +331,19 @@ void imagick_master_process_start(imagick_setting_t *setting)
         imagick_log_error("Faild to set socket nonblocking");
         return;
     }
+
+    /* init shared memory */
+    ncx_shmtx_init();
+    u_char *space = malloc(setting->max_cache);
+    if (space == NULL) {
+        imagick_log_error("Cannot alloc shared memory");
+        return;
+    }
+    main_ctx->pool = (ncx_slab_pool_t *)space;
+    main_ctx->pool->addr = space;
+    main_ctx->pool->min_shift = 3;
+    main_ctx->pool->end = space + setting->max_cache;
+    ncx_slab_init(main_ctx->pool);
 
     imagick_worker_process_start(setting->processes);
 

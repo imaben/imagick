@@ -16,7 +16,8 @@ imagick_setting_t __setting = {
     .logfile   = "/tmp/.imagick.log",
     .logmark   = IMAGICK_LOG_LEVEL_DEBUG,
     .imgroot   = NULL,
-    .daemon    = 0
+    .daemon    = 0,
+    .max_cache = IMAGICK_CACHE_MIN_SIZE
 }, *imagick_setting = &__setting;
 
 imagick_main_ctx_t __main_ctx, *main_ctx = &__main_ctx;;
@@ -28,6 +29,7 @@ static struct option options[] = {
     {"logfile",     required_argument,   0,   'l'},
     {"logmark",     required_argument,   0,   'm'},
     {"imgroot",     required_argument,   0,   'r'},
+    {"max-cache",   required_argument,   0,   'C'},
     {"daemon",      no_argument,         0,   'd'},
     {"help",        no_argument,         0,   '?'},
     {0, 0, 0, 0}
@@ -48,10 +50,63 @@ static void imagick_usage()
         " -r --imgroot <dir>\t\tThe images root path\n"
         " -l --logfile <file>\t\t\tThe log file to output\n"
         " -m --logmark <debug|notice|warn|error>\tWhich level log would be mark\n"
+        " -C --max-cache  The max cache size\n"
         " -d --daemon\t\t\t\t Using daemonize mode\n"
         " --help\t\t\t\t\tDiskplay the usage\n";
     fprintf(stdout, usage);
     exit(0);
+}
+
+static void imagick_parse_cache_size(char *optarg)
+{
+    int i, unit, with_unit, ts;
+    int units[] = {
+        66, 98,     // B
+        75, 107,    // K
+        77, 109,    // M
+        71, 103,    // G
+        84, 116,    // T
+        0
+    };
+    with_unit = 0;
+    unit = (int)optarg[strlen(optarg) - 1];
+    for (i = 0; units[i] != 0; i++) {
+        if (units[i] == unit) {
+            with_unit = 1;
+            break;
+        }
+    }
+    if (with_unit) {
+        char size[32] = { 0 };
+        strncpy(size, optarg, strlen(optarg) - 1);
+        ts = atoi(size);
+        switch ((char)unit) {
+            case 'B':
+            case 'b':
+                imagick_setting->max_cache = ts;
+                break;
+            case 'K':
+            case 'k':
+                imagick_setting->max_cache = ts * 1024;
+                break;
+            case 'M':
+            case 'm':
+                imagick_setting->max_cache = ts * 1024 * 1024;
+                break;
+            case 'G':
+            case 'g':
+                imagick_setting->max_cache = ts * 1024 * 1024 * 1024;
+                break;
+            default:
+                fatal("Unknow max-cache option");
+                break;
+        }
+    } else {
+        imagick_setting->max_cache = atoi(optarg);
+    }
+    if (imagick_setting->max_cache < IMAGICK_CACHE_MIN_SIZE) {
+        imagick_setting->max_cache = IMAGICK_CACHE_MIN_SIZE;
+    }
 }
 
 static void imagick_parse_options(int argc, char **argv)
@@ -95,6 +150,9 @@ static void imagick_parse_options(int argc, char **argv)
                 break;
             case 'r':
                 imagick_setting->imgroot = strdup(optarg);
+                break;
+            case 'C':
+                imagick_parse_cache_size(optarg);
                 break;
             case '?':
                 imagick_usage();

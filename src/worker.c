@@ -16,7 +16,7 @@ struct http_parser_settings hp_setting;
 static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
     imagick_connection_t *c = arg;
-    imagick_log_debug("send fd:%d, pid:%d\n", c->sockfd, getpid());
+    imagick_log_debug("send fd:%d, pid:%d", c->sockfd, getpid());
 
     int n, nwrite;
     if (c->status == IC_STATUS_SEND_HEADER) {
@@ -94,7 +94,7 @@ static void imagick_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
         c->status = IC_STATUS_RECEIVING;
     }
 
-    imagick_log_debug("recv fd:%d, pid:%d:\n", c->sockfd, getpid());
+    imagick_log_debug("recv fd:%d, pid:%d:", c->sockfd, getpid());
 
     char buf[128] = {0};
     int nread;
@@ -138,7 +138,7 @@ void imagick_main_sock_handler(imagick_event_loop_t *loop, int fd, void *arg)
                 break;
             }
         }
-        imagick_log_debug("new connection %d\n", fd);
+        imagick_log_debug("new connection %d", fd);
         imagick_set_nonblocking(connfd);
         imagick_connection_t *c = imagick_connection_create(connfd);
         loop->add_event(loop, connfd, IE_READABLE, imagick_recv_handler, c);
