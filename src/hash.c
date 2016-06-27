@@ -2,6 +2,7 @@
 #include <string.h>
 #include "hash.h"
 
+static imagick_hash_malloc_fn *ht_malloc;
 
 static unsigned int imagick_hash_buckets_size[] = {
     7,          13,         31,         61,         127,        251,
@@ -32,7 +33,7 @@ static long imagick_hash_default_hash(char *key, int klen)
 
 
 int imagick_hash_init(imagick_hash_t *o, unsigned int init_buckets,
-    imagick_hash_hash_fn *hash, imagick_hash_free_fn *free)
+    imagick_hash_hash_fn *hash, imagick_hash_free_fn *free, imagick_hash_malloc_fn *mmalloc)
 {
     if (init_buckets < IMAGICK_HASH_BUCKETS_MIN_SIZE) {
         init_buckets = IMAGICK_HASH_BUCKETS_MIN_SIZE;
@@ -41,7 +42,14 @@ int imagick_hash_init(imagick_hash_t *o, unsigned int init_buckets,
         init_buckets = IMAGICK_HASH_BUCKETS_MAX_SIZE;
     }
 
-    o->buckets = calloc(1, sizeof(void *) * init_buckets);
+    if (mmalloc == NULL) {
+        o->malloc = malloc;
+    } else {
+        o->malloc = mmalloc;
+    }
+
+    o->buckets = o->malloc(sizeof(void *) * init_buckets);
+    memset(o->buckets, 0, sizeof(void *) * init_buckets);
     if (NULL == o->buckets) {
         return -1;
     }
@@ -60,16 +68,21 @@ int imagick_hash_init(imagick_hash_t *o, unsigned int init_buckets,
 
 
 imagick_hash_t *imagick_hash_new(unsigned int init_buckets,
-    imagick_hash_hash_fn *hash, imagick_hash_free_fn *free)
+    imagick_hash_hash_fn *hash, imagick_hash_free_fn *free, imagick_hash_malloc_fn *mmalloc)
 {
     imagick_hash_t *o;
 
-    o = malloc(sizeof(*o));
+    if (mmalloc == NULL) {
+        o = malloc(sizeof(*o));
+    } else {
+        o = mmalloc(sizeof(*o));
+    }
+
     if (NULL == o) {
         return NULL;
     }
 
-    if (imagick_hash_init(o, init_buckets, hash, free) == -1) {
+    if (imagick_hash_init(o, init_buckets, hash, free, mmalloc) == -1) {
         free(o);
         return NULL;
     }
@@ -124,7 +137,7 @@ int imagick_hash_insert(imagick_hash_t *o, char *key, int klen, void *data, int 
         ei = &((*ei)->next);
     }
 
-    en = malloc(sizeof(*en) + klen);
+    en = o->malloc(sizeof(*en) + klen);
     if (NULL == en) {
         return IMAGICK_HASH_ERR;
     }
@@ -211,7 +224,7 @@ static void imagick_hash_rehash(imagick_hash_t *o)
     /* if new buckets size equls old buckets size,
      * or init new hashtable failed, return. */
     if (buckets_size == o->buckets_size ||
-        imagick_hash_init(&new_htb, buckets_size, NULL, NULL) == -1) {
+        imagick_hash_init(&new_htb, buckets_size, NULL, NULL, o->malloc) == -1) {
         return;
     }
 

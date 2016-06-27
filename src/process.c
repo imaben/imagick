@@ -301,6 +301,11 @@ void imagick_worker_exit(int signo)
     return;
 }
 
+static void *imagick_shm_malloc(size_t size)
+{
+    return ncx_slab_alloc(main_ctx->pool, size);
+}
+
 void imagick_master_process_start(imagick_setting_t *setting)
 {
     signal(SIGINT, &imagick_master_exit);
@@ -347,14 +352,9 @@ void imagick_master_process_start(imagick_setting_t *setting)
     ncx_slab_init(main_ctx->pool);
 
     /* init hash table */
-    main_ctx->cache_ht = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_hash_t));
+    main_ctx->cache_ht = imagick_hash_new(0, NULL, NULL, imagick_shm_malloc);
     if (main_ctx->cache_ht == NULL) {
         imagick_log_error("Failed to alloc shared memory for HashTable");
-        return;
-    }
-
-    if (imagick_hash_init(main_ctx->cache_ht, 0, NULL, NULL) == -1) {
-        imagick_log_error("Failed to initialize HashTable");
         return;
     }
 

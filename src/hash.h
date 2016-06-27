@@ -9,10 +9,12 @@
 
 typedef long imagick_hash_hash_fn(char *, int);
 typedef void imagick_hash_free_fn(void *);
+typedef void *imagick_hash_malloc_fn(size_t);
 
 typedef struct imagick_hash_s {
     imagick_hash_hash_fn *hash;
     imagick_hash_free_fn *free;
+    imagick_hash_malloc_fn *malloc;
     void **buckets;
     unsigned int buckets_size;
     unsigned int elm_nums;
@@ -30,9 +32,9 @@ struct imagick_hash_entry_s {
 
 
 int imagick_hash_init(imagick_hash_t *o, unsigned int init_buckets, imagick_hash_hash_fn *hash,
-    imagick_hash_free_fn *free);
+    imagick_hash_free_fn *free, imagick_hash_malloc_fn *mmalloc);
 imagick_hash_t *imagick_hash_new(unsigned int init_buckets, imagick_hash_hash_fn *hash,
-    imagick_hash_free_fn *free);
+    imagick_hash_free_fn *free, imagick_hash_malloc_fn *mmalloc);
 int imagick_hash_find(imagick_hash_t *o, char *key, int klen, void **ret);
 int imagick_hash_insert(imagick_hash_t *o, char *key, int klen, void *data, int replace);
 int imagick_hash_remove(imagick_hash_t *o, char *key, int klen);
