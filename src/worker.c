@@ -24,7 +24,7 @@ static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
         while (n > 0) {
             nwrite = write(c->sockfd, c->rbuf.c + c->wpos, n);
             if (nwrite < n) {
-                if (nwrite == -1 && errno != EAGAIN) {
+                if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
                     imagick_log_error("send http header failure (%d)", errno);
                     imagick_connection_free(c);
                     return;
@@ -48,7 +48,7 @@ static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
         while (n > 0) {
             nwrite = write(c->sockfd, c->cache->data + c->wpos, n);
             if (nwrite < n) {
-                if (nwrite == -1 && errno != EAGAIN) {
+                if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
                     imagick_log_error("send http body failure (%d)", errno);
                     imagick_connection_free(c);
                     return;
