@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/mman.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include "process.h"
@@ -301,9 +302,30 @@ void imagick_worker_exit(int signo)
     return;
 }
 
-static void *imagick_shm_malloc(size_t size)
+static void *imagick_ht_malloc(size_t size)
 {
     return ncx_slab_alloc(main_ctx->pool, size);
+}
+
+static u_char *imagick_shm_alloc(size_t size)
+{
+    int fd;
+    u_char *addr;
+    fd = open("/dev/zero", O_RDWR);
+    if (fd == -1) {
+        imagick_log_error("open (/dev/zero) failed");
+        return NULL;
+    }
+
+    addr = (u_char *)mmap(NULL, size, PROT_READ | PROT_WRITE,
+            MAP_SHARED, fd, 0);
+    if (addr == MAP_FAILED) {
+        imagick_log_error("mmap (/dev/zero, MAP_SHARED, %uz) failed", size);
+        return NULL;
+    }
+
+    close(fd);
+    return addr;
 }
 
 void imagick_master_process_start(imagick_setting_t *setting)
@@ -340,7 +362,7 @@ void imagick_master_process_start(imagick_setting_t *setting)
 
     /* init shared memory */
     ncx_shmtx_init();
-    u_char *space = malloc(setting->max_cache);
+    u_char *space = imagick_shm_alloc(setting->max_cache);
     if (space == NULL) {
         imagick_log_error("Cannot alloc shared memory");
         return;
@@ -352,7 +374,7 @@ void imagick_master_process_start(imagick_setting_t *setting)
     ncx_slab_init(main_ctx->pool);
 
     /* init hash table */
-    main_ctx->cache_ht = imagick_hash_new(0, NULL, NULL, imagick_shm_malloc);
+    main_ctx->cache_ht = imagick_hash_new(0, NULL, NULL, imagick_ht_malloc);
     if (main_ctx->cache_ht == NULL) {
         imagick_log_error("Failed to alloc shared memory for HashTable");
         return;
