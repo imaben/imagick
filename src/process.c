@@ -347,8 +347,13 @@ void imagick_master_process_start(imagick_setting_t *setting)
     ncx_slab_init(main_ctx->pool);
 
     /* init hash table */
-    main_ctx->cache_ht = imagick_hash_new(0, NULL, NULL);
+    main_ctx->cache_ht = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_hash_t));
     if (main_ctx->cache_ht == NULL) {
+        imagick_log_error("Failed to alloc shared memory for HashTable");
+        return;
+    }
+
+    if (imagick_hash_init(main_ctx->cache_ht, 0, NULL, NULL) == -1) {
         imagick_log_error("Failed to initialize HashTable");
         return;
     }

@@ -92,7 +92,7 @@ int imagick_hash_find(imagick_hash_t *o, char *key, int klen, void **ret)
             if (ret) {
                 *ret = e->data;
             }
-            return imagick_HASH_OK;
+            return IMAGICK_HASH_OK;
         }
         e = e->next;
     }
@@ -144,7 +144,7 @@ int imagick_hash_insert(imagick_hash_t *o, char *key, int klen, void *data, int 
         imagick_hash_rehash(o);
     }
 
-    return imagick_HASH_OK;
+    return IMAGICK_HASH_OK;
 }
 
 
