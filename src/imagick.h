@@ -2,6 +2,7 @@
 
 #include "ncx_slab.h"
 #include "hash.h"
+#include "spin.h"
 
 #define IMAGICK_CACHE_MIN_SIZE (1024 * 1024 * 10)  /* 10MB */
 #define IMAGICK_MAX_PROCESSES 1024
@@ -24,9 +25,10 @@ struct imagick_setting_s {
 typedef struct imagick_ctx_s imagick_ctx_t;
 
 struct imagick_ctx_s {
-    int sockfd;
-    ncx_slab_pool_t *pool;
-    imagick_hash_t *cache_ht; /* Hash table of images */
+    int               sockfd;
+    ncx_slab_pool_t   *pool;
+    imagick_hash_t    *cache_ht;  /* Hash table of images */
+    spin_t            cache_mutex;
 };
 
 

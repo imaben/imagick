@@ -367,6 +367,7 @@ void imagick_master_process_start(imagick_setting_t *setting)
         imagick_log_error("Cannot alloc shared memory");
         return;
     }
+
     main_ctx->pool = (ncx_slab_pool_t *)space;
     main_ctx->pool->addr = space;
     main_ctx->pool->min_shift = 3;
@@ -379,6 +380,7 @@ void imagick_master_process_start(imagick_setting_t *setting)
         imagick_log_error("Failed to alloc shared memory for HashTable");
         return;
     }
+    main_ctx->cache_mutex = 0;
 
     imagick_worker_process_start(setting->processes);
 

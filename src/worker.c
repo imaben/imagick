@@ -11,7 +11,15 @@
 #include "http_parser.h"
 #include "connection.h"
 
-struct http_parser_settings hp_setting;
+struct http_parser_settings hp_setting = {
+    .on_message_begin    = NULL,
+    .on_url              = NULL,
+    .on_header_field     = NULL,
+    .on_header_value     = NULL,
+    .on_headers_complete = NULL,
+    .on_body             = NULL,
+    .on_message_complete = NULL
+};
 
 static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
@@ -76,13 +84,26 @@ static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 static int imagick_parse_http(imagick_connection_t **c)
 {
     imagick_connection_t *cc = *c;
+    int retval;
+
+    retval = http_parser_execute(&cc->hp, &hp_setting, cc->rbuf.c, cc->rbuf.len);
+    if (retval == 0) {
+        // todo: assign bad request
+        return 0;
+    }
+
+    cc->cache = malloc(sizeof(imagick_cache_t));
+    if (cc->hp.method == HTTP_GET) {
+        cc->cache->size = strlen("hello world") + 1;
+        cc->cache->data = (void *)"hello world";
+    } else if (cc->hp.method == HTTP_POST) {
+        cc->cache->size = strlen("world hello") + 1;
+        cc->cache->data = (void *)"world hello";
+    }
     char header[256] = { 0 };
     sprintf(header, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", cc->rbuf.len);
     smart_str_0(&cc->wbuf);
 
-    cc->cache = malloc(sizeof(imagick_cache_t));
-    cc->cache->size = strlen("hello world") + 1;
-    cc->cache->data = (void *)"hello world";
     return 0;
 }
 
