@@ -16,7 +16,7 @@ int imagick_lock_init(imagick_lock_t *l)
     l->mutex = mmap(NULL, sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE,
             MAP_SHARED, fd, 0);
     if (l->mutex == MAP_FAILED) {
-        imagick_log_error("mmap (-1, MAP_SHARED) failed");
+        imagick_log_error("mmap (/dev/zero, MAP_SHARED) failed");
         return -1;
     }
     close(fd);

@@ -386,6 +386,13 @@ void imagick_master_process_start(imagick_setting_t *setting)
         return;
     }
 
+    /* init LRU */
+    main_ctx->lru = ncx_slab_alloc(main_ctx->pool, sizeof(struct list_head));
+    INIT_LIST_HEAD(main_ctx->lru);
+    if (0 > imagick_lock_init(&main_ctx->lru_mutex)) {
+        return;
+    }
+
     imagick_worker_process_start(setting->processes);
 
     if (sigprocmask(SIG_SETMASK, &old, NULL) == -1) {
