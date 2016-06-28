@@ -184,6 +184,7 @@ int main (int argc, char **argv)
     if (imagick_setting->daemon) {
         imagick_daemonize();
     }
+    main_ctx->setting = imagick_setting;
     imagick_master_process_start(imagick_setting);
     return 0;
 }

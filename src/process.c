@@ -23,6 +23,7 @@
 #include "ncx_slab.h"
 #include "ncx_lock.h"
 #include "hash.h"
+#include "lock.h"
 
 int imagick_argc;
 char **imagick_argv;
@@ -292,6 +293,7 @@ void imagick_master_exit(int sig_no)
         ch.fd = imagick_processes[i].channel[0];
         imagick_write_channel(&ch, &cmd);
     }
+    munmap(main_ctx->pool->addr, main_ctx->setting->max_cache);
 }
 
 void imagick_worker_exit(int signo)
@@ -380,7 +382,9 @@ void imagick_master_process_start(imagick_setting_t *setting)
         imagick_log_error("Failed to alloc shared memory for HashTable");
         return;
     }
-    main_ctx->cache_mutex = 0;
+    if (0 > imagick_lock_init(&main_ctx->cache_mutex)) {
+        return;
+    }
 
     imagick_worker_process_start(setting->processes);
 
