@@ -27,6 +27,8 @@ struct imagick_connection_s {
     smart_str wbuf; /* write buffer */
     int wpos; /* pos of header or body */
     imagick_cache_t *cache;
+
+    smart_str filename;
 };
 
 int imagick_listen_socket(char *addr, int port);

@@ -11,15 +11,28 @@
 #include "http_parser.h"
 #include "connection.h"
 
+static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len);
+
 struct http_parser_settings hp_setting = {
     .on_message_begin    = NULL,
-    .on_url              = NULL,
+    .on_url              = imagick_http_parser_url,
     .on_header_field     = NULL,
     .on_header_value     = NULL,
     .on_headers_complete = NULL,
     .on_body             = NULL,
     .on_message_complete = NULL
 };
+
+static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len)
+{
+    imagick_connection_t *conn = hp->data;
+    if (len <= 0) {
+        return -1;
+    }
+    smart_str_appendl(&conn->filename, at, len);
+    smart_str_0(&conn->filename);
+    return 0;
+}
 
 static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
