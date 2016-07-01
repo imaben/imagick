@@ -1,4 +1,5 @@
 #include "worker.h"
+#include "imagick.h"
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <errno.h>
@@ -23,6 +24,17 @@ struct http_parser_settings hp_setting = {
     .on_message_complete = NULL
 };
 
+imagick_cache_t cache_html_page_404 = {
+    .type = CACHE_TYPE_HTML,
+    .data = "<html>"
+"<head><title>404 Not Found</title></head>"
+"<body bgcolor=\"white\">"
+"<center><h1>404 Not Found</h1></center>"
+"<hr><div align=\"center\">Imagick " IMAGICK_VERSION "</div>"
+"</body>"
+"</html>"
+};
+
 static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len)
 {
     imagick_connection_t *conn = hp->data;
@@ -34,7 +46,7 @@ static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_
     return 0;
 }
 
-static void sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
+static void imagick_sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
     imagick_connection_t *c = arg;
     imagick_log_debug("send fd:%d, pid:%d", c->sockfd, getpid());
@@ -151,7 +163,7 @@ static void imagick_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
     }
 
     c->status = IC_STATUS_SEND_HEADER;
-    loop->add_event(loop, c->sockfd, IE_WRITABLE, sock_send_handler, c);
+    loop->add_event(loop, c->sockfd, IE_WRITABLE, imagick_sock_send_handler, c);
     return;
 
 fatal:

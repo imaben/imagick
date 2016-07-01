@@ -32,6 +32,5 @@
 *.dSYM/
 
 imagick
-event
 tags
 .gdbinit

@@ -10,10 +10,16 @@ enum IC_STATUS {
     IC_STATUS_FINISH
 };
 
+enum CACHE_TYPE {
+    CACHE_TYPE_HTML,
+    CACHE_TYPE_BIN
+};
+
 typedef struct imagick_connection_s imagick_connection_t;
 typedef struct imagick_cache_s imagick_cache_t;
 
 struct imagick_cache_s {
+    enum CACHE_TYPE type;
     int size;
     void *data;
 };

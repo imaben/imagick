@@ -8,6 +8,8 @@
 #define IMAGICK_CACHE_MIN_SIZE (1024 * 1024 * 10)  /* 10MB */
 #define IMAGICK_MAX_PROCESSES 1024
 
+#define IMAGICK_VERSION "0.0.1"
+
 typedef unsigned int uint_t;
 
 typedef struct imagick_setting_s imagick_setting_t;
