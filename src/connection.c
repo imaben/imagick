@@ -63,20 +63,18 @@ imagick_connection_t *imagick_connection_create(int sockfd)
     }
 
     conn->sockfd = sockfd;
-    conn->http_code = 200;
     conn->status = IC_STATUS_WAIT_RECV;
 
     http_parser_init(&conn->hp, HTTP_REQUEST);
     conn->hp.data = conn;
     memset(&conn->rbuf, 0, sizeof(conn->rbuf));
-    memset(&conn->wbuf, 0, sizeof(conn->wbuf));
+    memset(&conn->filename, 0, sizeof(conn->filename));
     return conn;
 }
 
 void imagick_connection_free(imagick_connection_t *c)
 {
     smart_str_free(&c->rbuf);
-    smart_str_free(&c->wbuf);
     smart_str_free(&c->filename);
     if (c->sockfd) close(c->sockfd);
     free(c);

@@ -20,21 +20,21 @@ typedef struct imagick_cache_s imagick_cache_t;
 
 struct imagick_cache_s {
     enum CACHE_TYPE type;
+    int ref_count;
+    int http_code;
+    smart_str header; /* write buffer */
+    int wpos; /* pos of header or body */
     int size;
     void *data;
 };
 
 struct imagick_connection_s {
     int sockfd;
-    int http_code;
     int status;
     struct http_parser hp;
     smart_str rbuf; /* read buffer */
-    smart_str wbuf; /* write buffer */
-    int wpos; /* pos of header or body */
-    imagick_cache_t *cache;
-
     smart_str filename;
+    imagick_cache_t *cache;
 };
 
 int imagick_listen_socket(char *addr, int port);

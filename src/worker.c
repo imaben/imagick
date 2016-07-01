@@ -7,10 +7,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netdb.h>
+#include <netdb.h>
 #include "log.h"
 #include "utils.h"
 #include "http_parser.h"
 #include "connection.h"
+#include "lock.h"
+#include "hash.h"
 
 static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len);
 
@@ -24,16 +27,63 @@ struct http_parser_settings hp_setting = {
     .on_message_complete = NULL
 };
 
-imagick_cache_t cache_html_page_404 = {
-    .type = CACHE_TYPE_HTML,
-    .data = "<html>"
+static char html_page_400[] = "<html>"
+"<head><title>400 Bad Request</title></head>"
+"<body bgcolor=\"white\">"
+"<center><h1>400 Bad Request</h1></center>"
+"<hr><div align=\"center\">Imagick " IMAGICK_VERSION "</div>"
+"</body>"
+"</html>";
+
+static char html_page_404[] = "<html>"
 "<head><title>404 Not Found</title></head>"
 "<body bgcolor=\"white\">"
 "<center><h1>404 Not Found</h1></center>"
 "<hr><div align=\"center\">Imagick " IMAGICK_VERSION "</div>"
 "</body>"
-"</html>"
+"</html>";
+
+#define tostr(s) #s
+
+static char header_page_400[] = "HTTP/1.1 400 Bad Request\r\n"
+"Content-Type: text/html\r\n"
+"Content-Length: " tostr(sizeof(html_page_400)) "\r\n"
+"Server: Imagick\r\n\r\n";
+
+static imagick_cache_t cache_page_400 = {
+    .type = CACHE_TYPE_HTML,
+    .ref_count = 0,
+    .http_code = 400,
+    /* !!! read only !!! */
+    .header = {
+        .c = header_page_400,
+        .len = sizeof(header_page_400)
+    },
+    .wpos = 0,
+    .size = sizeof(html_page_400),
+    .data = html_page_400
 };
+
+
+static int imagick_set_header(imagick_cache_t *cache)
+{
+    if (!cache) {
+        return -1;
+    }
+    switch (cache->http_code) {
+        case 200:
+            // todo
+            break;
+
+        case 400:
+            smart_str_appends(&cache->header, "HTTP/1.1 400 Bad Request\r\n");
+            smart_str_appends(&cache->header, "Content-Type: text/html\r\n");
+            smart_str_appends(&cache->header, "Content-Length: ");
+            smart_str_append_long(&cache->header, cache->size);
+            smart_str_appends(&cache->header, "\r\nServer: Imagick\r\n\r\n");
+            break;
+    }
+}
 
 static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len)
 {
@@ -46,76 +96,119 @@ static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_
     return 0;
 }
 
+static void imagick_send_header(imagick_connection_t *conn)
+{
+    int n, nwrite;
+    imagick_cache_t *c = conn->cache;
+
+    n = c->header.len - c->wpos;
+    while (n > 0) {
+        nwrite = write(conn->sockfd, c->header.c + c->wpos, n);
+        if (nwrite < n) {
+            if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                imagick_log_error("send http header failure (%d)", errno);
+                imagick_connection_free(conn);
+                return;
+            }
+            break;
+        }
+        c->wpos += nwrite;
+        n -= nwrite;
+    }
+    if (n == 0) {
+        // header already sent
+        conn->status = IC_STATUS_SEND_BODY;
+        c->wpos = 0;
+    } else {
+        return;
+    }
+}
+
+static void imagick_send_body(imagick_connection_t *conn)
+{
+    int n, nwrite;
+    imagick_cache_t *c = conn->cache;
+
+    n = c->size - c->wpos;
+    while (n > 0) {
+        nwrite = write(conn->sockfd, c->data + c->wpos, n);
+        if (nwrite < n) {
+            if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                imagick_log_error("send http body failure (%d)", errno);
+                imagick_connection_free(conn);
+                return;
+            }
+            break;
+        }
+        c->wpos += nwrite;
+        n -= nwrite;
+    }
+    if (n == 0) {
+        // header already sent
+        conn->status = IC_STATUS_FINISH;
+        c->wpos = 0;
+    } else {
+        return;
+    }
+
+}
+
 static void imagick_sock_send_handler(imagick_event_loop_t *loop, int fd, void *arg)
 {
-    imagick_connection_t *c = arg;
-    imagick_log_debug("send fd:%d, pid:%d", c->sockfd, getpid());
+    imagick_connection_t *conn = arg;
+    imagick_cache_t *c = conn->cache;
+    imagick_log_debug("send fd:%d, pid:%d", conn->sockfd, getpid());
 
     int n, nwrite;
-    if (c->status == IC_STATUS_SEND_HEADER) {
-        n = c->wbuf.len - c->wpos;
-        while (n > 0) {
-            nwrite = write(c->sockfd, c->rbuf.c + c->wpos, n);
-            if (nwrite < n) {
-                if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                    imagick_log_error("send http header failure (%d)", errno);
-                    imagick_connection_free(c);
-                    return;
-                }
-                break;
-            }
-            c->wpos += nwrite;
-            n -= nwrite;
-        }
-        if (n == 0) {
-            // header already sent
-            c->status = IC_STATUS_SEND_BODY;
-            c->wpos = 0;
-        } else {
-            return;
-        }
+
+    if (conn->status == IC_STATUS_SEND_HEADER) {
+        imagick_send_header(conn);
     }
 
-    if (c->status == IC_STATUS_SEND_BODY) {
-        n = c->cache->size - c->wpos;
-        while (n > 0) {
-            nwrite = write(c->sockfd, c->cache->data + c->wpos, n);
-            if (nwrite < n) {
-                if (nwrite == -1 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                    imagick_log_error("send http body failure (%d)", errno);
-                    imagick_connection_free(c);
-                    return;
-                }
-                break;
-            }
-            c->wpos += nwrite;
-            n -= nwrite;
-        }
-        if (n == 0) {
-            // header already sent
-            c->status = IC_STATUS_FINISH;
-            c->wpos = 0;
-        } else {
-            return;
-        }
+    if (conn->status == IC_STATUS_SEND_BODY) {
+        imagick_send_body(conn);
     }
 
-    if (c->status == IC_STATUS_FINISH) {
-        loop->del_event(loop, c->sockfd, IE_READABLE | IE_WRITABLE);
-        imagick_connection_free(c);
+    if (conn->status == IC_STATUS_FINISH) {
+        loop->del_event(loop, conn->sockfd, IE_READABLE | IE_WRITABLE);
+        imagick_connection_free(conn);
     }
 }
 
 static int imagick_parse_http(imagick_connection_t **c)
 {
     imagick_connection_t *cc = *c;
+    cc->cache;
+
     int retval;
 
     retval = http_parser_execute(&cc->hp, &hp_setting, cc->rbuf.c, cc->rbuf.len);
     if (retval == 0) {
-        // todo: assign bad request
+        cc->cache = &cache_page_400;
         return 0;
     }
+
+    if (cc->filename.len == 0) {
+        cc->cache = &cache_page_400;
+        return 0;
+    }
+
+    imagick_lock_lock(&main_ctx->cache_mutex);
+
+    imagick_cache_t *r = NULL;
+
+    int find = imagick_hash_find(main_ctx->cache_ht, cc->filename.c,
+            cc->filename.len, (void **)&r);
+    if (find == IMAGICK_HASH_OK) {
+        cc->cache = r;
+        cc->cache->ref_count++;
+    } else {
+        cc->cache = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_cache_t));
+    }
+
+    imagick_lock_unlock(&main_ctx->cache_mutex);
+
+    imagick_log_debug("filename:%s\n", cc->filename.c);
 
     cc->cache = malloc(sizeof(imagick_cache_t));
     if (cc->hp.method == HTTP_GET) {
@@ -127,8 +220,6 @@ static int imagick_parse_http(imagick_connection_t **c)
     }
     char header[256] = { 0 };
     sprintf(header, "HTTP/1.1 200 OK\r\nContent-Length: %d\r\n\r\n", cc->rbuf.len);
-    smart_str_0(&cc->wbuf);
-
     return 0;
 }
 
@@ -144,9 +235,11 @@ static void imagick_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
 
     char buf[128] = {0};
     int nread;
+
     while ((nread = read(c->sockfd, buf, 128)) > 0) {
         smart_str_appendl(&c->rbuf, buf, nread);
     }
+
     if (nread == -1 && errno != EAGAIN) {
         imagick_log_warn("Failed to read data %d", fd);
         goto fatal;
@@ -156,6 +249,7 @@ static void imagick_recv_handler(imagick_event_loop_t *loop, int fd, void *arg)
     if (nread == EAGAIN || nread == EWOULDBLOCK) {
         return;
     }
+
     // read complete
     smart_str_0(&c->rbuf);
     if (imagick_parse_http(&c) == -1) {
