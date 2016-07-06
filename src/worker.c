@@ -50,15 +50,29 @@ static char html_page_404[] = "<html>"
 "</body>"
 "</html>";
 
+static char html_page_500[] = "<html>"
+"<head><title>500 Internal Server Error</title></head>"
+"<body bgcolor=\"white\">"
+"<center><h1>500 Internal Server Error</h1></center>"
+"<hr><div align=\"center\">Imagick " IMAGICK_VERSION "</div>"
+"</body>"
+"</html>";
+
 static char header_page_400[] = "HTTP/1.1 400 Bad Request\r\n"
 "Content-Type: text/html\r\n"
-"Content-Length: 166\r\n"
+"Content-Length: 170\r\n"
 "Server: Imagick\r\n\r\n";
 
 static char header_page_404[] = "HTTP/1.1 404 Not Found\r\n"
 "Content-Type: text/html\r\n"
 "Content-Length: 166\r\n"
 "Server: Imagick\r\n\r\n";
+
+static char header_page_500[] = "HTTP/1.1 500 Internal Server Error\r\n"
+"Content-Type: text/html\r\n"
+"Content-Length: 178\r\n"
+"Server: Imagick\r\n\r\n";
+
 
 static imagick_cache_t cache_page_400 = {
     .flag = CACHE_TYPE_HTML | CACHE_TYPE_INTERNAL,
@@ -86,6 +100,20 @@ static imagick_cache_t cache_page_404 = {
     .wpos = 0,
     .size = sizeof(html_page_404),
     .data = html_page_404
+};
+
+static imagick_cache_t cache_page_500 = {
+    .flag = CACHE_TYPE_HTML | CACHE_TYPE_INTERNAL,
+    .ref_count = 0,
+    .http_code = 500,
+    /* !!! read only !!! */
+    .header = {
+        .c = header_page_500,
+        .len = sizeof(header_page_500)
+    },
+    .wpos = 0,
+    .size = sizeof(html_page_500),
+    .data = html_page_500
 };
 
 
@@ -221,7 +249,7 @@ static int imagick_parse_http(imagick_connection_t **c)
     smart_str full_path = { 0 };
     if (-1 == imagick_get_full_path(&full_path, cc->filename.c)) {
         imagick_log_error("Failed imagick_get_full_path");
-        // todo 500 page
+        cc->cache = &cache_page_500;
         return 0;
     }
 
