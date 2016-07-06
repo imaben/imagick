@@ -16,8 +16,7 @@
 #include "hash.h"
 
 static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len);
-
-struct http_parser_settings hp_setting = {
+static struct http_parser_settings hp_setting = {
     .on_message_begin    = NULL,
     .on_url              = imagick_http_parser_url,
     .on_header_field     = NULL,
@@ -26,6 +25,14 @@ struct http_parser_settings hp_setting = {
     .on_body             = NULL,
     .on_message_complete = NULL
 };
+
+static int imagick_get_full_path(smart_str *dst, char *path)
+{
+    if (NULL == dst || NULL == path || strlen(path) == 0) {
+        return -1;
+    }
+    return imagick_path_join(dst, main_ctx->setting->imgroot, path, NULL);
+}
 
 static char html_page_400[] = "<html>"
 "<head><title>400 Bad Request</title></head>"
@@ -43,15 +50,18 @@ static char html_page_404[] = "<html>"
 "</body>"
 "</html>";
 
-#define tostr(s) #s
-
 static char header_page_400[] = "HTTP/1.1 400 Bad Request\r\n"
 "Content-Type: text/html\r\n"
-"Content-Length: " tostr(sizeof(html_page_400)) "\r\n"
+"Content-Length: 166\r\n"
+"Server: Imagick\r\n\r\n";
+
+static char header_page_404[] = "HTTP/1.1 404 Not Found\r\n"
+"Content-Type: text/html\r\n"
+"Content-Length: 166\r\n"
 "Server: Imagick\r\n\r\n";
 
 static imagick_cache_t cache_page_400 = {
-    .type = CACHE_TYPE_HTML,
+    .flag = CACHE_TYPE_HTML | CACHE_TYPE_INTERNAL,
     .ref_count = 0,
     .http_code = 400,
     /* !!! read only !!! */
@@ -62,6 +72,20 @@ static imagick_cache_t cache_page_400 = {
     .wpos = 0,
     .size = sizeof(html_page_400),
     .data = html_page_400
+};
+
+static imagick_cache_t cache_page_404 = {
+    .flag = CACHE_TYPE_HTML | CACHE_TYPE_INTERNAL,
+    .ref_count = 0,
+    .http_code = 404,
+    /* !!! read only !!! */
+    .header = {
+        .c = header_page_404,
+        .len = sizeof(header_page_404)
+    },
+    .wpos = 0,
+    .size = sizeof(html_page_404),
+    .data = html_page_404
 };
 
 
@@ -193,6 +217,19 @@ static int imagick_parse_http(imagick_connection_t **c)
         return 0;
     }
 
+    // check file exists
+    smart_str full_path = { 0 };
+    if (-1 == imagick_get_full_path(&full_path, cc->filename.c)) {
+        imagick_log_error("Failed imagick_get_full_path");
+        // todo 500 page
+        return 0;
+    }
+
+    if (! imagick_file_is_exists(full_path.c)) {
+        cc->cache = &cache_page_404;
+        return 0;
+    }
+
     imagick_lock_lock(&main_ctx->cache_mutex);
 
     imagick_cache_t *r = NULL;
@@ -201,7 +238,7 @@ static int imagick_parse_http(imagick_connection_t **c)
             cc->filename.len, (void **)&r);
     if (find == IMAGICK_HASH_OK) {
         cc->cache = r;
-        cc->cache->ref_count++;
+        CACHE_REF(cc->cache);
     } else {
         cc->cache = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_cache_t));
     }

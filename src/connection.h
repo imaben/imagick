@@ -10,16 +10,27 @@ enum IC_STATUS {
     IC_STATUS_FINISH
 };
 
-enum CACHE_TYPE {
-    CACHE_TYPE_HTML,
-    CACHE_TYPE_BIN
+enum CACHE_FLAGS {
+    CACHE_TYPE_HTML     = 1 << 0,
+    CACHE_TYPE_BIN      = 1 << 1,
+    CACHE_TYPE_INTERNAL = 1 << 2
 };
+
+#define CACHE_REF_OP(cache, op) do { \
+    imagick_cache_t *t = (imagick_cache_t *)cache; \
+    if (!(t->flag & CACHE_TYPE_INTERNAL)) { \
+        op ? t->ref_count++ : t->ref_count--; \
+    } \
+} while (0)
+
+#define CACHE_REF(cache) CACHE_REF_OP(cache, 1)
+#define CACHE_UNREF(cache) CACHE_REF_OP(cache, 0)
 
 typedef struct imagick_connection_s imagick_connection_t;
 typedef struct imagick_cache_s imagick_cache_t;
 
 struct imagick_cache_s {
-    enum CACHE_TYPE type;
+    int flag;
     int ref_count;
     int http_code;
     smart_str header; /* write buffer */
