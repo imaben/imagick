@@ -77,5 +77,6 @@ void imagick_connection_free(imagick_connection_t *c)
     smart_str_free(&c->rbuf);
     smart_str_free(&c->filename);
     if (c->sockfd) close(c->sockfd);
+    CACHE_UNREF(c->cache);
     free(c);
 }

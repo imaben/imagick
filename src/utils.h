@@ -9,3 +9,5 @@ int imagick_path_format(smart_str *dst, char *src);
 
 /* The last argument must be NULL */
 int imagick_path_join(smart_str *dst, char *src, ...);
+
+const char *imagick_get_content_type(char *ext_name);

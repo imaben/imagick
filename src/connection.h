@@ -18,7 +18,7 @@ enum CACHE_FLAGS {
 
 #define CACHE_REF_OP(cache, op) do { \
     imagick_cache_t *t = (imagick_cache_t *)cache; \
-    if (!(t->flag & CACHE_TYPE_INTERNAL)) { \
+    if (t && !(t->flag & CACHE_TYPE_INTERNAL)) { \
         op ? t->ref_count++ : t->ref_count--; \
     } \
 } while (0)

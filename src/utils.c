@@ -54,3 +54,40 @@ int imagick_path_join(smart_str *dst, char *src, ...)
     va_end(al);
     return 0;
 }
+
+const char *content_type[] = {
+	".jpeg",
+    "image/jpeg",
+	".jpg",
+    "application/x-jpg",
+	".png",
+    "application/x-png",
+	".gif",
+    "image/gif",
+    NULL
+};
+const char *default_content_type = "application/x-jpg";
+
+const char *imagick_get_content_type(char *ext_name)
+{
+    if (ext_name == NULL || strlen(ext_name) == 0) {
+        return default_content_type;
+    }
+
+    int i = 0;
+    for (;content_type[i] != NULL;) {
+        /* It's over, return default content type */
+        if (strlen(content_type[i]) == 0)
+            return default_content_type;
+
+        if (strlen(ext_name) >= strlen(content_type[i]))
+            goto next;
+
+        if (strcmp(ext_name, content_type[i]) == 0) {
+            return content_type[i + 1];
+        }
+next:
+        i += 2;
+    }
+
+}
