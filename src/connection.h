@@ -1,6 +1,6 @@
 #pragma once
-#include  "http_parser.h"
-#include  "smart_str.h"
+#include "http_parser.h"
+#include "smart_str.h"
 
 enum IC_STATUS {
     IC_STATUS_WAIT_RECV = 0,
@@ -16,6 +16,7 @@ enum CACHE_FLAGS {
     CACHE_TYPE_INTERNAL = 1 << 2
 };
 
+/* Need maintain the mutex before used */
 #define CACHE_REF_OP(cache, op) do { \
     imagick_cache_t *t = (imagick_cache_t *)cache; \
     if (t && !(t->flag & CACHE_TYPE_INTERNAL)) { \

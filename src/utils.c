@@ -89,5 +89,14 @@ const char *imagick_get_content_type(char *ext_name)
 next:
         i += 2;
     }
+    return default_content_type;
+}
 
+const char *imagick_get_file_extension(const char *filename)
+{
+    const char *dot = strrchr(filename, '.');
+    if (!dot || dot == filename) {
+        return NULL;
+    }
+    return dot;
 }
