@@ -92,9 +92,9 @@ next:
     return default_content_type;
 }
 
-const char *imagick_get_file_extension(const char *filename)
+char *imagick_get_file_extension(char *filename)
 {
-    const char *dot = strrchr(filename, '.');
+    char *dot = strrchr(filename, '.');
     if (!dot || dot == filename) {
         return NULL;
     }

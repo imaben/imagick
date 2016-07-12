@@ -34,19 +34,19 @@ struct imagick_cache_s {
     int flag;
     int ref_count;
     int http_code;
-    smart_str header; /* write buffer */
-    int wpos; /* pos of header or body */
+    char header[256]; /* write buffer */
     int size;
     void *data;
 };
 
 struct imagick_connection_s {
-    int sockfd;
-    int status;
+    int                sockfd;
+    int                status;
+    int                wpos;         /*    pos    of       header   or   body   */
     struct http_parser hp;
-    smart_str rbuf; /* read buffer */
-    smart_str filename;
-    imagick_cache_t *cache;
+    smart_str          rbuf;         /*    read   buffer   */
+    smart_str          filename;
+    imagick_cache_t    *cache;
 };
 
 int imagick_listen_socket(char *addr, int port);

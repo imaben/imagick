@@ -64,11 +64,12 @@ imagick_connection_t *imagick_connection_create(int sockfd)
 
     conn->sockfd = sockfd;
     conn->status = IC_STATUS_WAIT_RECV;
-
+    conn->wpos = 0;
     http_parser_init(&conn->hp, HTTP_REQUEST);
     conn->hp.data = conn;
     memset(&conn->rbuf, 0, sizeof(conn->rbuf));
     memset(&conn->filename, 0, sizeof(conn->filename));
+    conn->cache = NULL;
     return conn;
 }
 
