@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdarg.h>
+#include <sys/stat.h>
 
 int imagick_set_nonblocking(int fd)
 {
@@ -45,10 +46,10 @@ int imagick_path_join(smart_str *dst, char *src, ...)
 
     va_start(al, src);
     while (s) {
-        smart_str_appends(dst, s);
-        if (s[strlen(s) - 1] != '/') {
+        if (dst->len > 0 && dst->c[dst->len - 1] != '/') {
             smart_str_appendc(dst, '/');
         }
+        smart_str_appends(dst, s);
         s = va_arg(al, char*);
     }
     va_end(al);
@@ -59,14 +60,14 @@ const char *content_type[] = {
 	".jpeg",
     "image/jpeg",
 	".jpg",
-    "application/x-jpg",
+    "image/jpeg",
 	".png",
-    "application/x-png",
+    "image/png",
 	".gif",
     "image/gif",
     NULL
 };
-const char *default_content_type = "application/x-jpg";
+const char *default_content_type = "image/jpeg";
 
 const char *imagick_get_content_type(char *ext_name)
 {
@@ -99,4 +100,11 @@ char *imagick_get_file_extension(char *filename)
         return NULL;
     }
     return dot;
+}
+
+int imagick_get_file_size(char *filename)
+{
+    struct stat s;
+    stat(filename, &s);
+    return s.st_size;
 }

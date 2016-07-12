@@ -2,6 +2,8 @@
 #include "http_parser.h"
 #include "smart_str.h"
 
+#define DEFAULT_HEADER_SIZE 256
+
 enum IC_STATUS {
     IC_STATUS_WAIT_RECV = 0,
     IC_STATUS_RECEIVING,
@@ -34,7 +36,7 @@ struct imagick_cache_s {
     int flag;
     int ref_count;
     int http_code;
-    char header[256]; /* write buffer */
+    char header[DEFAULT_HEADER_SIZE]; /* write buffer */
     int size;
     void *data;
 };

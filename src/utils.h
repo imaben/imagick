@@ -12,3 +12,4 @@ int imagick_path_join(smart_str *dst, char *src, ...);
 
 const char *imagick_get_content_type(char *ext_name);
 char *imagick_get_file_extension(char *filename);
+int imagick_get_file_size(char *filename);

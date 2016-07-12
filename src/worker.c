@@ -124,6 +124,16 @@ static imagick_cache_t *imagick_get_internal_page_cache(int http_code)
     }
 }
 
+static int imagick_format_header(char *header, const char *content_type, int size)
+{
+    static char header_tpl[] = "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %d\r\n"
+        "Server: Imagick\r\n\r\n";
+    sprintf(header, header_tpl, content_type, size);
+    return 0;
+}
+
 static int imagick_http_parser_url(struct http_parser *hp, const char *at, size_t len)
 {
     imagick_connection_t *conn = hp->data;
@@ -140,7 +150,7 @@ static void imagick_send_header(imagick_connection_t *conn)
     int n, nwrite;
     imagick_cache_t *c = conn->cache;
 
-    n = strlen(c->header) + 1 - conn->wpos;
+    n = strlen(c->header) - conn->wpos;
     while (n > 0) {
         nwrite = write(conn->sockfd, c->header + conn->wpos, n);
         if (nwrite < n) {
@@ -214,6 +224,13 @@ static void imagick_sock_send_handler(imagick_event_loop_t *loop, int fd, void *
     }
 }
 
+static inline void imagick_insert_cache_ht(imagick_connection_t *conn)
+{
+    imagick_lock_lock(&main_ctx->cache_mutex);
+    imagick_hash_insert(main_ctx->cache_ht, conn->filename.c, conn->filename.len, conn->cache, 1);
+    imagick_lock_unlock(&main_ctx->cache_mutex);
+}
+
 static int imagick_parse_http(imagick_connection_t **c)
 {
     imagick_connection_t *cc = *c;
@@ -239,8 +256,10 @@ static int imagick_parse_http(imagick_connection_t **c)
         cc->cache = imagick_get_internal_page_cache(500);
         return 0;
     }
+    smart_str_0(&full_path);
 
     if (! imagick_file_is_exists(full_path.c)) {
+        imagick_log_error("Request %s (404)", full_path.c);
         cc->cache = imagick_get_internal_page_cache(404);
         return 0;
     }
@@ -252,6 +271,7 @@ static int imagick_parse_http(imagick_connection_t **c)
     int find = imagick_hash_find(main_ctx->cache_ht, cc->filename.c,
             cc->filename.len, (void **)&r);
     if (find == IMAGICK_HASH_OK) {
+        imagick_log_debug("hit cache (%s)", cc->filename.c);
         cc->cache = r;
         CACHE_REF(cc->cache);
         imagick_lock_unlock(&main_ctx->cache_mutex);
@@ -259,27 +279,36 @@ static int imagick_parse_http(imagick_connection_t **c)
     }
     imagick_lock_unlock(&main_ctx->cache_mutex);
 
-    FILE *fp = fopen(full_path.c, "r");
+    FILE *fp = fopen(full_path.c, "rb");
     if (!fp) {
         imagick_log_error("Failed to open file (%s)", full_path);
         cc->cache = imagick_get_internal_page_cache(500);
         return 0;
     }
 
+    cc->cache = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_cache_t));
+    if (NULL == cc->cache) {
+        cc->cache = imagick_get_internal_page_cache(500);
+        imagick_log_error("Failed to alloc memory");
+        return 0;
+    }
+
     const char *content_type = imagick_get_content_type(
             imagick_get_file_extension(full_path.c));
+    int fsize = imagick_get_file_size(full_path.c);
 
-    cc->cache = ncx_slab_alloc(main_ctx->pool, sizeof(imagick_cache_t));
+    cc->cache->flag = CACHE_TYPE_BIN;
+    cc->cache->ref_count = 1;
+    cc->cache->http_code = 200;
+    cc->cache->size = fsize;
+    imagick_format_header(cc->cache->header, content_type, fsize);
+    cc->cache->data = ncx_slab_alloc(main_ctx->pool, fsize);
+    fread(cc->cache->data, fsize, 1, fp);
+    fclose(fp);
 
     imagick_log_debug("filename:%s\n", cc->filename.c);
 
-    if (cc->hp.method == HTTP_GET) {
-        cc->cache->size = strlen("hello world") + 1;
-        cc->cache->data = (void *)"hello world";
-    } else if (cc->hp.method == HTTP_POST) {
-        cc->cache->size = strlen("world hello") + 1;
-        cc->cache->data = (void *)"world hello";
-    }
+    imagick_insert_cache_ht(cc);
     return 0;
 }
 
