@@ -27,7 +27,7 @@ static struct http_parser_settings hp_setting = {
     .on_message_complete = NULL
 };
 
-static int imagick_get_full_path(smart_str *dst, char *path)
+static inline int imagick_get_full_path(smart_str *dst, char *path)
 {
     if (NULL == dst || NULL == path || strlen(path) == 0) {
         return -1;
@@ -224,6 +224,14 @@ static void imagick_sock_send_handler(imagick_event_loop_t *loop, int fd, void *
     }
 }
 
+static inline int imagick_find_cache(char *key, int key_len, imagick_cache_t **c)
+{
+    imagick_lock_lock(&main_ctx->cache_mutex);
+    int find = imagick_hash_find(main_ctx->cache_ht, key, key_len, (void **)c);
+    imagick_lock_unlock(&main_ctx->cache_mutex);
+    return find;
+}
+
 static inline void imagick_insert_cache_ht(imagick_connection_t *conn)
 {
     imagick_lock_lock(&main_ctx->cache_mutex);
@@ -259,25 +267,20 @@ static int imagick_parse_http(imagick_connection_t **c)
     smart_str_0(&full_path);
 
     if (! imagick_file_is_exists(full_path.c)) {
-        imagick_log_error("Request %s (404)", full_path.c);
+        imagick_log_warn("Request %s (404)", full_path.c);
         cc->cache = imagick_get_internal_page_cache(404);
         return 0;
     }
 
-    imagick_lock_lock(&main_ctx->cache_mutex);
 
     imagick_cache_t *r = NULL;
-
-    int find = imagick_hash_find(main_ctx->cache_ht, cc->filename.c,
-            cc->filename.len, (void **)&r);
+    int find = imagick_find_cache(cc->filename.c, cc->filename.len, &r);
     if (find == IMAGICK_HASH_OK) {
         imagick_log_debug("hit cache (%s)", cc->filename.c);
         cc->cache = r;
         CACHE_REF(cc->cache);
-        imagick_lock_unlock(&main_ctx->cache_mutex);
         return 0;
     }
-    imagick_lock_unlock(&main_ctx->cache_mutex);
 
     FILE *fp = fopen(full_path.c, "rb");
     if (!fp) {
